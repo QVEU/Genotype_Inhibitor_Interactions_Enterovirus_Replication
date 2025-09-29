@@ -1,0 +1,15 @@
+[{
+ "name": "2024-07-05_16:29_3A_EVA71_Dimer",
+ "modelSeeds": [
+  "956539973"
+ ],
+ "sequences": [
+  {
+   "proteinChain": {
+    "sequence": "GPPKFRPIRISLEEKPAPDAISDLLASVDSEEVRQYCRDQGWIVPDSPTNVERHLNRAVLIMQSVATVVAVVSLVYVIYKLFAGFQ",
+    "count": 2
+   }
+  }
+ ]
+}
+]

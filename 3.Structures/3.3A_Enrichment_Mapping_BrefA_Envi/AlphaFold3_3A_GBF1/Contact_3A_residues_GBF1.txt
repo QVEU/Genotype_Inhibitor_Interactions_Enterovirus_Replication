@@ -1,0 +1,15 @@
+residue id /B:12 name LEU index 11
+residue id /B:14 name GLU index 13
+residue id /B:15 name LYS index 14
+residue id /B:16 name PRO index 15
+residue id /B:17 name ALA index 16
+residue id /B:24 name LEU index 23
+residue id /B:27 name SER index 26
+residue id /B:28 name VAL index 27
+residue id /B:29 name ASP index 28
+residue id /B:30 name SER index 29
+residue id /B:32 name GLU index 31
+residue id /B:33 name VAL index 32
+residue id /B:36 name TYR index 35
+residue id /B:40 name GLN index 39
+residue id /B:42 name TRP index 41
