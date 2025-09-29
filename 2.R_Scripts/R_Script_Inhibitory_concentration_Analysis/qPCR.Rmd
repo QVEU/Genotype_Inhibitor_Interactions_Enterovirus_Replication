@@ -1,0 +1,204 @@
+---
+title: "Untitled"
+author: "William_Bakhache"
+date: "2025-02-14"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(tidyr)
+library(ggpubr)
+library(dplyr)
+library(ggridges)
+library(ineq)
+library(RColorBrewer)
+library(stringr)
+library(gglorenz)
+library(readr)
+library(scales)
+library(drc)
+library(ggplotify)
+
+
+```
+
+```{r}
+qPCR_2 <- read_csv("2024-05-29_113139_GAPDH_5UTR_Effeciency.csv", skip = 43)
+
+qPCR_2 <- dplyr::select(qPCR_2, "Well Position", "Sample Name","CT","Target Name","Quantity", "Efficiency","R(superscript 2)","Slope")
+
+
+#Rename Columns
+qPCR_2 <- qPCR_2 %>% rename(WellPosition = colnames(qPCR_2)[1])
+qPCR_2 <- qPCR_2 %>% rename(SampleName = colnames(qPCR_2)[2])
+qPCR_2 <- qPCR_2 %>% rename(Target = colnames(qPCR_2)[4])
+
+qPCR_2_WB_EVA71_5UTR <- filter(qPCR_2,Target=="WBEVA715UTR")
+qPCR_2_WB_EVA71_5UTR
+qPCR_2_WB_EVA71_5UTR_plot <- ggplot(qPCR_2_WB_EVA71_5UTR, aes(x = `Quantity`, y = `CT`))+ geom_point()+labs(x = "Relative Quantity", y = "CT") +theme_classic()+
+geom_smooth(method="lm",color="black",lwd=0.5)+scale_x_log10()
+ggsave("qPCR_2_WB_EVA71_5UTR_plot.pdf", height = 2, width = 2)
+qPCR_2_WB_EVA71_5UTR_plot
+model_qPCR_2_WB_EVA71_5UTR <- lm(log10(`Quantity`)~ `CT`, data = qPCR_2_WB_EVA71_5UTR)
+summary_model_qPCR_2_WB_EVA71_5UTR <- summary(model_qPCR_2_WB_EVA71_5UTR)
+summary_model_qPCR_2_WB_EVA71_5UTR
+
+qPCR_2_GAPDH <- filter(qPCR_2,Target=="GAPDH")
+qPCR_2_GAPDH
+qPCR_2_GAPDH_plot <- ggplot(qPCR_2_GAPDH, aes(x = `Quantity`, y = `CT`))+ geom_point()+labs(x = "Relative Quantity", y = "CT") +theme_classic()+
+geom_smooth(method="lm",color="black",lwd=0.5)+scale_x_log10()
+ggsave("qPCR_2_GAPDH_plot.pdf",height = 2, width = 2)
+qPCR_2_GAPDH_plot
+model_qPCR_2_GAPDH <- lm(log10(`Quantity`)~ `CT`, data = qPCR_2_GAPDH)
+summary_model_qPCR_2_GAPDH <- summary(model_qPCR_2_GAPDH)
+summary_model_qPCR_2_GAPDH
+```
+
+```{r}
+qPCR_IC50_Analysis <- function(input_dataframe,titerviability,startingconcentration) {
+#Reads in csv file skipping rows
+qPCR <- read_csv(input_dataframe, skip = 42)
+
+#Selects only columns of interest: Well position/Sample Name/CT
+qPCR <- dplyr::select(qPCR, "Well Position", "Sample Name","CT","Target Name")
+
+#Rename Columns
+qPCR <- qPCR %>% rename(WellPosition = colnames(qPCR)[1])
+qPCR <- qPCR %>% rename(SampleName = colnames(qPCR)[2])
+qPCR <- qPCR %>% rename(Target = colnames(qPCR)[4])
+
+#Subsets row 1:96
+qPCR <- qPCR[1:96, ]
+
+#Calculate the mean CT for the technical replicates
+qPCR <- qPCR %>% group_by(SampleName,Target) %>% summarize(CT = mean(CT)) %>% ungroup()
+
+#Calculate delta CT which is virus-reference gene
+qPCR <- qPCR %>%
+  group_by(SampleName) %>%
+  summarize(DeltaCT = CT[Target == "WBEVA715UTR"] - CT[Target == "GAPDH"])              
+
+#Calculate the average reference: non-infected control
+reference_avg <- mean(qPCR$DeltaCT[qPCR$SampleName %in% c("NI", "NI_bis")])
+
+#Subtract Deltact with the reference average
+qPCR$DeltaDeltaCT <- qPCR$DeltaCT - reference_avg
+
+#Calculate the 2^-DeltaDeltaCT
+qPCR <- mutate(qPCR,DeltaDeltaCT=2^-DeltaDeltaCT)
+
+#Extract information on the concentration from the concentration column
+qPCR <- qPCR %>%
+  mutate(concentration = as.numeric(gsub("Conc_(\\d+).*", "\\1", SampleName)))
+
+#Calculate the meanCT for the biological replicates
+qPCR <- qPCR %>%
+  group_by(concentration_group = gsub("bis", "", concentration)) %>%
+  mutate(mean_CT = mean(DeltaDeltaCT),
+         sd_CT = sd(DeltaDeltaCT)) %>%
+  distinct(concentration_group, .keep_all = TRUE) %>%
+  ungroup() %>%
+  dplyr::select(-concentration_group)
+
+#Custom concentrations dataframe that will be set with in nanomolar
+custom_concentrations <- c("0" = 0, "1" = startingconcentration, "2" = startingconcentration/2, "3" = startingconcentration/4, "4" = startingconcentration/8, "5" = startingconcentration/16, "6" = startingconcentration/32, "7" = startingconcentration/64, "8" = startingconcentration/128, "9" = startingconcentration/256,"10" = startingconcentration/512)
+
+#Arranging concentration in descending order
+qPCR$concentration <- custom_concentrations[as.character(qPCR$concentration)]
+qPCR <- qPCR %>% arrange(desc(concentration))
+
+#Celltiter_data
+#Reads in csv file
+Celltiter <- read_csv(titerviability)
+#Extract information on the concentration from the concentration column
+Celltiter <- Celltiter %>%
+ mutate(concentration = as.numeric(gsub("Conc_(\\d+).*", "\\1", SampleName)))
+#Reference average viability
+reference_avg_via <- mean(Celltiter$Viability[Celltiter$SampleName %in% c("Conc_0", "Conc_0_bis")])
+#Subtract viability with the non-treated control 
+Celltiter$Viability <- (Celltiter$Viability / reference_avg_via)*100
+Celltiter
+#Calculate the mean viability for the biological replicates
+Celltiter <- Celltiter %>%
+  group_by(concentration_group = gsub("bis", "", concentration)) %>%
+  mutate(Viability_mean = mean(Viability),
+         sd_via = sd(Viability)) %>%
+  distinct(concentration_group, .keep_all = TRUE) %>%
+  ungroup() %>%
+  dplyr::select(-concentration_group)
+#Arranging concentration in descending order
+Celltiter$concentration <- custom_concentrations[as.character(Celltiter$concentration)]
+Celltiter <- Celltiter %>% arrange(desc(concentration))
+
+#Using a 4 parameter model to calculate the IC50,90,99,99.9 using an asymptotic confidence interval
+    model <- drm(mean_CT ~ concentration, data = qPCR, fct = LL.4(names = c("Hill_slop", "Lower Limit", "Upper Limit", "IC50")))
+    Inhibitory_Conc <- ED(model, c(50, 90,99,99.9), interval = "delta")
+
+#Using ggplot geom_smooth to plot the log(10) of concentration against the mean_CT
+Plot <- ggplot(qPCR, aes(x = log10(concentration), y = log10(mean_CT))) +
+geom_point() +geom_smooth(color="black",lwd=0.5,alpha=0.2)+
+labs(x = "Concentration", y = "Normalized Viral Expression")+theme_classic()
+ 
+#Plot name
+filename <- paste0("IC50_", input_dataframe, ".pdf")
+    
+#Save plot
+ggsave(plot=Plot,filename, height = 2, width = 2)
+
+
+#Plot name
+filename_DRC <- paste0("IC50_DRC", input_dataframe, ".pdf")
+   
+pdf(file = filename_DRC, width = 5, height = 4) 
+plot(model)
+plot(model, broken = TRUE, type="confidence", add=TRUE,confidence.level = 0.95,log="xy")
+dev.off()
+
+
+#Using a 4 parameter model to calculate the IC50,90,99,99.9 using an asymptotic confidence interval
+    model_via <- drm(Viability ~ concentration, data = Celltiter, fct = LL.4(names = c("Hill_slop", "Lower Limit", "Upper Limit", "IC50")))
+    Inhibitory_Conc_via <- ED(model_via, c(50, 90,99,99.9), interval = "delta")
+
+#Using ggplot geom_smooth to plot the log(10) of concentration against the mean_CT
+Plot_via <- ggplot(Celltiter, aes(x = log10(concentration), y =Viability)) +
+geom_point() +geom_smooth(color="black",lwd=0.5,alpha=0.2)+
+labs(x = "Concentration", y = "Cellular Viability")+theme_classic()+ylim(0,120)
+    
+#Plot name
+filename <- paste0("CC50_", input_dataframe, ".pdf")
+    
+#Save plot
+ggsave(plot=Plot_via,filename, height = 2, width = 2)
+
+#Return these objects
+    return(list(dataframe=qPCR,summaryofmodel=summary(model),plot=Plot,ICs=Inhibitory_Conc,dataframe=Celltiter,summaryofmodelvia=summary(model_via),CCs=Inhibitory_Conc_via,plot_via=Plot_via))
+
+}
+```
+
+
+```{r}
+qPCR_IC50_Analysis("2024-05-22_113138_IC50_Rupintrivir.csv",titerviability="Cell_Titer_Viability_Rupintrivir.csv",startingconcentration=1000)
+
+
+```
+
+
+```{r}
+qPCR_IC50_Analysis("2024-06-06_113138_Enviviroxime.csv",titerviability="Cell_Titer_Viability_Enviviroxime.csv",startingconcentration=25000)
+
+```
+
+```{r}
+qPCR_IC50_Analysis("2024-06-06_092658_guan_2nd_time.csv",titerviability="Cell_Titer_Viability_GuanHCL.csv",startingconcentration=4000000)
+
+```
+
+```{r}
+qPCR_IC50_Analysis("2024-07-25_170549_BrefA_2ndexperiment.csv",titerviability="Cell_Titer_Viability_BrefA.csv",startingconcentration=12500)
+
+```
+
+
