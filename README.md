@@ -26,10 +26,8 @@ This repository contains all files, scripts, and structural predictions used in 
 │   ├── Supplementary_figure_3.ai
 │   └── Supplementary_figure_4.ai
 ├── 2.R_Scripts
-│   ├── R_Script_Contact_3C_Rupi_Analysis
 │   ├── R_Script_Inhibitory_concentration_Analysis
 │   ├── R_Script_Main_Figures_Analysis
-│   └── R_Script_RMSF_2A_3C_Analysis
 ├── 3.Structures
 │   ├── 1.2A_3C_Enrichment_Mapping_Rupi
 │   ├── 2.2C_Enrichment_Mapping_BrefA_Guan
@@ -45,10 +43,8 @@ This repository contains all files, scripts, and structural predictions used in 
 ---
 
 ## 2. R Scripts
-- **"R_Script_Contact_3C_Rupi_Analysis"**: Calculates 3C(pro)-Rupintrivir contacts
 - **"R_Script_Inhibitory_concentration_Analysis"**: Calculates antiviral concentrations of inhibitors  
 - **"R_Script_Main_Figures_Analysis"**: Generates the main figures for the manuscript  
-- **"R_Script_RMSF_2A_3C_Analysis"**: Calculates RMSF from Boltz1 structures for 2A and 3C
 
 ---
 
