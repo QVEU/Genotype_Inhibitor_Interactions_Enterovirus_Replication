@@ -1,0 +1,11 @@
+Model 1 is fold_2024_07_05_16_29_eva71_2c_hexamer_model_0.cif				
+Model 2 is pred.model_idx_0_2C_guan_chai.cif				
+				
+Distance information:				
+fold_2024_07_05_16_29_eva71_2c_hexamer_model_0.cif #1/B LEU 206 CD1 <-> /E LEU 206 CD1:  8.411				
+fold_2024_07_05_16_29_eva71_2c_hexamer_model_0.cif #1/D LEU 206 CD1 <-> /A LEU 206 CD1:  8.680				
+fold_2024_07_05_16_29_eva71_2c_hexamer_model_0.cif #1/C LEU 206 CD1 <-> /F LEU 206 CD1:  8.704				
+				
+				
+				
+			Average	8.60
