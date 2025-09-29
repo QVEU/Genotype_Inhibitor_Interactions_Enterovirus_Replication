@@ -1,0 +1,1441 @@
+---
+title: "Figure_Generation_Antivirals"
+author: "William_Bakhache"
+date: "2024-11-21"
+output: html_document
+---
+
+```{r}
+#Loading libraries
+library(ggplot2)
+library(tidyverse)
+library(ggpubr)
+library(scales)
+library(zoo)
+library(cowplot)
+library(rstatix)
+library(corrplot)
+library(matrixStats)
+library(coin)
+
+#Features used to define borders of gene products
+EV_Features <- read_csv("EV71_4643_Features.csv")
+EV_Features
+
+#Create a mapping of positions to viral proteins
+Viral_protein_Mapping <- data.frame(
+  start = c(863,1013,1112,1441,1527,1549,1732),
+  end = c(1012,1111,1440,1526,1548,1731,2193), 
+  viralprotein = c("2A","2B","2C","3A","3B","3C","3D"))
+Viral_protein_Mapping
+
+#Creating dataframe that contains viral protein length information
+viral_protein_lengths <- data.frame(
+  viralprotein = c("2A","2B","2C","3A","3B","3C","3D"),  
+  length = c(150, 99,329,86,22,183,462)  
+)
+#Calculating potential mutations for each viral protein
+viral_protein_lengths <- viral_protein_lengths %>%
+  mutate(Potential_Mutations = length * 19) 
+viral_protein_lengths
+```
+
+```{r}
+#Preparing dataframe for control condition
+#Reading in tsv file from Enrich2
+df_control_full <- read_tsv("main_identifiers_scores_Control_Conditions.tsv", col_names = TRUE)
+
+#Extracting information on position and amino acid using grep
+df_control_full$Aminoacid <- gsub(".*\\d(\\D).*", "\\1", df_control_full$hgvs)
+df_control_full$position <- as.numeric(gsub("p\\.\\(\\D*(\\d+).*", "\\1", df_control_full$hgvs))
+
+#Adjusting position to the start codon P1 = 862 amino acids and arranging by position
+df_control_full <- mutate(df_control_full,position=position+862)
+df_control_full <- df_control_full %>% arrange(position)
+
+#Adding column with viral protein information for each position
+df_control_full <- df_control_full %>% mutate(viralprotein = sapply(position, function(pos) {
+matching_row <- which(pos >= Viral_protein_Mapping$start & pos <= Viral_protein_Mapping$end)
+if (length(matching_row) > 0) {return(Viral_protein_Mapping$viralprotein[matching_row])} else {return("No Protein")}})
+)
+
+#Use amino acid as factors
+df_control_full$Aminoacid=factor(df_control_full$Aminoacid,levels = c("P","G","Y","W","F","V","L","I","A","T","S","Q","N","M","C","E","D","R","K","H"))
+
+df_control_full
+
+```
+
+```{r}
+#Create a dataframe with WT NA values to be used with the heatmap
+
+#Creating a wild type dataframe
+wt_dataframe <- df_control_full
+
+#Deduplicating according to position, retaining only the first occurrence of a certain position
+#wt_dataframe[...]:Uses the logical vector created to subset the wt_dataframe
+#Duplicated counts only second and subsequent occurences as TRUE, ! is used to invert logical vector
+wt_dataframe <- wt_dataframe[!duplicated(wt_dataframe$position), ]
+
+# Extracting the original amino acid that is always at the 4th character
+wt_dataframe$original_aa <- substr(wt_dataframe$hgvs, 4, 4) 
+wt_dataframe <- mutate(wt_dataframe,original_pos=position-862)
+
+# Construct the wild type hgvs and replace the existing 'hgvs' column
+wt_dataframe$hgvs <- paste0("p.(", wt_dataframe$original_aa, wt_dataframe$original_pos, wt_dataframe$original_aa, ")")
+
+# Remove the temporary columns for better 
+wt_dataframe$Aminoacid <- NULL
+colnames(wt_dataframe)[colnames(wt_dataframe) == "original_aa"] <- "Aminoacid"
+wt_dataframe$original_aa <- NULL
+wt_dataframe$original_pos <- NULL
+
+#Add NA to all score/SE/epsilon as these wt amino acids are not measured
+wt_dataframe$score_Control_Condition <- NA
+wt_dataframe$SE_Control_Condition <- NA
+wt_dataframe$epsilon_Control_Condition <- NA
+
+#Create a new dataframe with the DMS result and the wildtype dataframe and arrange by position
+df_control_full_wt <- rbind(df_control_full, wt_dataframe)
+df_control_full_wt <- df_control_full_wt %>% arrange(position)
+
+```
+
+```{r}
+#Modification to the df_control_full_wt to make it compatible with the heatmap code
+
+#Convert position to a factor with breaks
+breaks_inputheatmap <- seq(863, 2193, by = 221.83)
+
+#Create a function to assign labels based on position
+get_label_input <- function(position) {
+  sub_labels <- c("A","B","C","D","E","F","G")
+  sub_index <- findInterval(position, breaks_inputheatmap)
+  return(sub_labels[sub_index])
+}
+
+#Create a column sub to add labels for the different rows of the heatmap
+df_control_full_wt$sub <- sapply(df_control_full_wt$position, get_label_input)
+
+#Use amino acid as factors
+df_control_full_wt$Aminoacid=factor(df_control_full_wt$Aminoacid,levels = c("P","G","Y","W","F","V","L","I","A","T","S","Q","N","M","C","E","D","R","K","H"))
+
+df_control_full_wt
+
+```
+
+
+```{r}
+#Heatmap for DMS scores in control condition
+DMS_Heatmap_Replication_Control <- ggplot(df_control_full_wt)+geom_tile(aes(position, Aminoacid, fill = score_Control_Condition)) +
+    scale_fill_gradient2(midpoint = 0,limits = c(-8,8),low = muted("orchid2"), mid = "white",
+                         high = muted("aquamarine1"),space = "Lab", na.value = "black") + theme_classic() +
+                        facet_wrap(sub ~ ., scales = "free_x",ncol=1) + theme(aspect.ratio = 0.1,axis.text.y = element_text(size = 3))+ theme(strip.text.x = element_blank())
+
+DMS_Heatmap_Replication_Control
+
+ggsave(plot = DMS_Heatmap_Replication_Control,filename = "DMS_Heatmap_Replication_Control.pdf",width = 8,height=11)
+```
+
+```{r}
+#Summarize by position and calculate the mean of scores. 
+#Calculate rolling mean of the mean scores using a window size of 10
+EV_A71_replication_protein_DMS_roll <- df_control_full %>%
+  group_by(position) %>%
+  summarize(mean_A71 = mean(score_Control_Condition, na.rm = TRUE)) %>%
+  mutate(roll_mean_A71 = rollmean(mean_A71, 10, fill = NA))
+
+#Plotting MFE entropy
+EV71_entropy_plot_complete<- ggplot()+
+geom_rect(data = EV_Features, aes(xmin=(Start-743)/3,xmax=(End-745)/3, ymin = -4, ymax = 2), alpha = rep(times = 1, c(0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15)))+theme_classic() +
+geom_line(data=EV_A71_replication_protein_DMS_roll, aes(x=position, y=roll_mean_A71), lwd=0.8) +xlab("Residue Position") +ylab("Mean MFE Entropy")+ coord_cartesian(xlim=c(863,2193))
+
+EV71_entropy_plot_complete
+
+ggsave(plot=EV71_entropy_plot_complete,"EV71_entropy_plot_complete.png", height = 3, width = 6)
+
+```
+
+```{r}
+#This function takes as input the dataframe from enrich2 that has all the enrich2 scores under the different conditions, then calculates fold enrichment with respect to the control condition. It will then calculate the log mean between all biological replicates
+
+process_enrichment_data <- function(df, protein_mapping = Viral_protein_Mapping, position_offset = 862) {
+  #Read in dataframe
+  df <- read_tsv(df, col_names = TRUE)
+  # Extract information on position and amino acid using grep
+  df$Aminoacid <- gsub(".*\\d(\\D).*", "\\1", df$hgvs)
+  df$position <- as.numeric(gsub("p\\.\\(\\D*(\\d+).*", "\\1", df$hgvs))
+  df <- mutate(df, position = position + position_offset)
+  df <- df %>% arrange(position)
+
+  # Calculate fold enrichment by subtracting log2 scores 
+  df <- mutate(df, Enrichment_IC50_RepA = (score_RepA_IC50_Condition - score_RepA_Control_Condition))
+  df <- mutate(df, Enrichment_IC50_RepB = (score_RepB_IC50_Condition - score_RepB_Control_Condition))
+  df <- mutate(df, Enrichment_IC50_RepC = (score_RepC_IC50_Condition - score_RepC_Control_Condition))
+  df <- mutate(df, Enrichment_IC90_RepA = (score_RepA_IC90_Condition - score_RepA_Control_Condition))
+  df <- mutate(df, Enrichment_IC90_RepB = (score_RepB_IC90_Condition - score_RepB_Control_Condition))
+  df <- mutate(df, Enrichment_IC90_RepC = (score_RepC_IC90_Condition - score_RepC_Control_Condition))
+  df <- mutate(df, Enrichment_IC99_RepA = (score_RepA_IC99_Condition - score_RepA_Control_Condition))
+  df <- mutate(df, Enrichment_IC99_RepB = (score_RepB_IC99_Condition - score_RepB_Control_Condition))
+  df <- mutate(df, Enrichment_IC99_RepC = (score_RepC_IC99_Condition - score_RepC_Control_Condition))
+
+#Calculating log mean and sd of the three biological replicates using rowMeans and rowSdS
+
+df <- mutate(df,mean_score_control = rowMeans(across(c(score_RepA_Control_Condition, score_RepB_Control_Condition, score_RepC_Control_Condition)))) 
+  
+df <- df %>%
+mutate(Mean_Enrichment_IC50 = rowMeans(across(c(Enrichment_IC50_RepA, Enrichment_IC50_RepB, Enrichment_IC50_RepC))))
+
+df <- df %>%
+mutate(Mean_Enrichment_IC90 = rowMeans(across(c(Enrichment_IC90_RepA, Enrichment_IC90_RepB, Enrichment_IC90_RepC))))
+
+df <- df %>%
+mutate(Mean_Enrichment_IC99 = rowMeans(across(c(Enrichment_IC99_RepA, Enrichment_IC99_RepB, Enrichment_IC99_RepC))))
+
+df <- df %>%
+mutate(SD_Control_Condition = rowSds(as.matrix(select(., score_RepA_Control_Condition, score_RepB_Control_Condition, score_RepC_Control_Condition))))
+
+df <- df %>%
+mutate(SD_Enrichment_IC50 = rowSds(as.matrix(select(., Enrichment_IC50_RepA, Enrichment_IC50_RepB, Enrichment_IC50_RepC))))
+
+df <- df %>%
+mutate(SD_Enrichment_IC90 = rowSds(as.matrix(select(., Enrichment_IC90_RepA, Enrichment_IC90_RepB, Enrichment_IC90_RepC))))
+
+df <- df %>%
+mutate(SD_Enrichment_IC99 = rowSds(as.matrix(select(., Enrichment_IC99_RepA, Enrichment_IC99_RepB, Enrichment_IC99_RepC))))
+
+# Add column with viral protein information for each position
+df <- df %>% mutate(viralprotein = sapply(position, function(pos) {
+    matching_row <- which(pos >= protein_mapping$start & pos <= protein_mapping$end)
+    if (length(matching_row) > 0) {
+      return(protein_mapping$viralprotein[matching_row])
+    } else {
+      return("No Protein")
+    }
+  }))
+
+  return(df)
+}
+
+#Usage of function:
+df_rupi_full <- process_enrichment_data("main_identifiers_scores_shared_rupintrivir.tsv")
+df_guan_full <- process_enrichment_data("main_identifiers_scores_shared_guanhcl.tsv")
+df_enviroxime_full <- process_enrichment_data("main_identifiers_scores_shared_Enviroxime.tsv")
+df_BrefA_full <- process_enrichment_data("main_identifiers_scores_shared_BrefA.tsv")
+
+df_rupi_full
+df_guan_full
+df_enviroxime_full
+df_BrefA_full
+
+```
+
+```{r}
+#Creating correlation plots for the different biological replicates
+
+#Renaming columns for the dataframes for correlation matrix
+current_column_names_corr <- c("score_RepA_Control_Condition","score_RepB_Control_Condition","score_RepC_Control_Condition",
+                    "score_RepA_IC50_Condition","score_RepB_IC50_Condition","score_RepC_IC50_Condition",
+                    "score_RepA_IC90_Condition","score_RepB_IC90_Condition","score_RepC_IC90_Condition",
+                    "score_RepA_IC99_Condition","score_RepB_IC99_Condition","score_RepC_IC99_Condition") 
+
+new_column_names_corr <- c("RepA_Ctrl", "RepB_Ctrl", "RepC_Ctrl", "RepA_IC50", "RepB_IC50", "RepC_IC50", "RepA_IC90", "RepB_IC90", "RepC_IC90", "RepA_IC99", "RepB_IC99", "RepC_IC99")
+```
+
+
+```{r}
+#Selecting for only columns with enrich2 scores
+df_rupi_full_corr <- df_rupi_full  %>% select(all_of(current_column_names_corr))
+
+# Rename columns in my dataframe
+colnames(df_rupi_full_corr)[match(current_column_names_corr, colnames(df_rupi_full_corr))] <- new_column_names_corr
+
+# Calculate the correlation matrix (Default is pearson,r is the Pearson correlation coefficient)
+correlation_matrix_rupi <- cor(df_rupi_full_corr)
+
+pdf("correlation_matrix_rupi_plot.pdf", width = 8, height = 8) 
+correlation_matrix_rupi_plot <- corrplot(correlation_matrix_rupi, method = "color",
+         type = "upper", 
+         addCoef.col = "white", 
+         tl.col = "black", tl.srt = 45, 
+         diag = FALSE, 
+         tl.cex = 0.8,      
+         number.cex = 0.9)  
+```
+
+```{r}
+#Selecting for only columns with enrich2 scores
+df_guan_full_corr <- df_guan_full  %>% select(all_of(current_column_names_corr))
+
+# Rename columns in my dataframe
+colnames(df_guan_full_corr)[match(current_column_names_corr, colnames(df_guan_full_corr))] <- new_column_names_corr
+
+# Calculate the correlation matrix (Default is pearson,r is the Pearson correlation coefficient)
+correlation_matrix_guan <- cor(df_guan_full_corr)
+
+pdf("correlation_matrix_guan_plot.pdf", width = 8, height = 8) 
+correlation_matrix_guan_plot <- corrplot(correlation_matrix_guan, method = "color",
+         type = "upper", 
+         addCoef.col = "white", 
+         tl.col = "black", tl.srt = 45, 
+         diag = FALSE, 
+         tl.cex = 0.8,      
+         number.cex = 0.9)  
+
+```
+
+```{r}
+#Selecting for only columns with enrich2 scores
+df_envi_full_corr <- df_enviroxime_full  %>% select(all_of(current_column_names_corr))
+
+# Rename columns in my dataframe
+colnames(df_envi_full_corr)[match(current_column_names_corr, colnames(df_envi_full_corr))] <- new_column_names_corr
+
+# Calculate the correlation matrix (Default is pearson,r is the Pearson correlation coefficient)
+correlation_matrix_envi <- cor(df_envi_full_corr)
+
+pdf("correlation_matrix_envi_plot.pdf", width = 8, height = 8) 
+correlation_matrix_envi_plot <- corrplot(correlation_matrix_envi, method = "color",
+         type = "upper", 
+         addCoef.col = "white", 
+         tl.col = "black", tl.srt = 45, 
+         diag = FALSE, 
+         tl.cex = 0.8,      
+         number.cex = 0.9)  
+
+```
+
+```{r}
+#Selecting for only columns with enrich2 scores
+df_brefA_full_corr <- df_BrefA_full  %>% select(all_of(current_column_names_corr))
+
+# Rename columns in my dataframe
+colnames(df_brefA_full_corr)[match(current_column_names_corr, colnames(df_brefA_full_corr))] <- new_column_names_corr
+
+# Calculate the correlation matrix (Default is pearson,r is the Pearson correlation coefficient)
+correlation_matrix_brefA <- cor(df_brefA_full_corr)
+
+pdf("correlation_matrix_brefA_plot.pdf", width = 8, height = 8) 
+correlation_matrix_brefA_plot <- corrplot(correlation_matrix_brefA, method = "color",
+         type = "upper", 
+         addCoef.col = "white", 
+         tl.col = "black", tl.srt = 45, 
+         diag = FALSE, 
+         tl.cex = 0.8,      
+         number.cex = 0.9)  
+```
+
+```{r}
+#Preparing dataframe for control condition with all control conditions for bootstrapping
+#Reading in tsv file from Enrich2
+df_control_shared <- read_tsv("main_identifiers_scores_shared_Control_Conditions.tsv", col_names = TRUE)
+
+#Extracting information on position and amino acid using grep
+df_control_shared$Aminoacid <- gsub(".*\\d(\\D).*", "\\1", df_control_shared$hgvs)
+df_control_shared$position <- as.numeric(gsub("p\\.\\(\\D*(\\d+).*", "\\1", df_control_shared$hgvs))
+
+#Adjusting position to the start codon P1 = 862 amino acids and arranging by position
+df_control_shared <- mutate(df_control_shared,position=position+862)
+df_control_shared <- df_control_shared %>% arrange(position)
+
+df_control_shared
+```
+
+```{r}
+# Bootstrapping function to calculate threshold for enrichment cutoff from control condition data
+# Threshold is set to obtain top 1 % of variants i.e. upper 99% confidence interval
+
+bootstrap_fold_change_tail <- function(df,num_bootstraps,percentile) {
+  
+# Calculate the logmean of enrich2 scores in control condition
+ df <- df %>%
+  mutate(score_Control_Condition = rowMeans(across(c(
+        score_RepA_Rupi_Control_Condition,score_RepB_Rupi_Control_Condition,score_RepC_Rupi_Control_Condition,
+        score_RepA_Guan_Control_Condition,score_RepB_Guan_Control_Condition,score_RepC_Guan_Control_Condition,
+        score_RepA_Envi_Control_Condition,score_RepB_Envi_Control_Condition,score_RepC_Envi_Control_Condition,
+        score_RepA_BrefA_Control_Condition, score_RepB_BrefA_Control_Condition, score_RepC_BrefA_Control_Condition))))
+  
+# Select only for the calculated mean column
+df <- select(df,score_Control_Condition)
+
+# Create a numeric vector with number of bootstraps empty values
+allfold_changes <- numeric(num_bootstraps)
+
+  # Bootstrapping function start
+  for (i in 1:num_bootstraps) {
+    # Creating a df and sampling rows with replacement
+    df_boot <- df[sample(nrow(df), replace = TRUE), , drop = FALSE]
+    # Calculating the 99% percentile fold change in each bootstrap
+    allfold_changes[i] <- quantile(df_boot$score_Control_Condition,percentile) 
+  }
+
+     hist((df_boot$score_Control_Condition), breaks = 30,
+     main = "Distribution of Control Enrich2 Scores",
+     xlab = "enrich2 scores", col = "lightgreen", border = "white")
+abline(v = mean(allfold_changes), col = "red", lwd = 2)
+  
+    hist(allfold_changes, breaks = 30, 
+       main = "Distribution of Bootstrapped Fold Changes ",
+       xlab = "Fold Change", col = "lightblue", border = "white")
+  abline(v = mean(allfold_changes), col = "red", lwd = 2)  
+  
+  # Return a list with the threshold and confidence intervals
+ return(mean(allfold_changes))
+}
+
+# Calculate the threshold by obtaining the upper 99% confidence interval, meaning top 1% percent.
+#1000 bootstraps done.
+enrichment_cutoff <- bootstrap_fold_change_tail(df_control_shared,num_bootstraps = 1000 , percentile = 0.99)
+
+enrichment_cutoff
+
+```
+
+```{r}
+# This is a function to calculate the number of variants enriched per viral protein
+# This also includes a modification to calculate what's observed and what's expected depending on protein size
+
+count_proteins_by_enrichment <- function(df, enrichment_cutoff,viral_protein_lengths) {
+  
+# Calculate total length of all proteins
+total_length <- sum(viral_protein_lengths$length)
+
+# Calculate expected ratio based on length
+viral_protein_lengths <- viral_protein_lengths %>%
+  mutate(expected_ratio = (length / total_length))
+
+# Filter for IC50
+filtered_df_50 <- df %>% filter(Mean_Enrichment_IC50 > enrichment_cutoff)
+
+protein_counts_50 <- filtered_df_50 %>% dplyr::count(viralprotein) %>% mutate(observed_ratio=(n/sum(n)))
+
+# Join with your existing counts
+protein_counts_50 <- 
+  left_join(viral_protein_lengths,protein_counts_50, by = "viralprotein") %>%
+mutate_if(is.numeric,coalesce,0)
+
+# Calculate the under/over representation metric
+protein_counts_50 <- protein_counts_50 %>%
+  mutate(under_over_rep = (observed_ratio - expected_ratio) / expected_ratio)
+
+#Calculate total mutations at IC50
+protein_counts_50 <- protein_counts_50  %>% mutate(totalmuations=sum(n))
+
+# Filter for IC90
+filtered_df_90 <- df %>% filter(Mean_Enrichment_IC90 > enrichment_cutoff)
+
+protein_counts_90 <- filtered_df_90 %>% dplyr::count(viralprotein) %>% mutate(observed_ratio=(n/sum(n)))
+
+# Join with your existing counts
+protein_counts_90 <- 
+  left_join(viral_protein_lengths,protein_counts_90, by = "viralprotein") %>%
+mutate_if(is.numeric,coalesce,0)
+
+# Calculate the under/over representation metric
+protein_counts_90 <- protein_counts_90 %>%
+  mutate(under_over_rep = (observed_ratio - expected_ratio) / expected_ratio)
+
+#Calculate total mutations at IC90
+protein_counts_90 <- protein_counts_90  %>% mutate(totalmuations=sum(n))
+
+# Filter for IC99
+filtered_df_99 <- df %>% filter(Mean_Enrichment_IC99 > enrichment_cutoff)
+
+protein_counts_99 <- filtered_df_99 %>% dplyr::count(viralprotein) %>% mutate(observed_ratio=(n/sum(n)))
+
+# Join with your existing counts
+protein_counts_99 <- 
+  left_join(viral_protein_lengths,protein_counts_99, by = "viralprotein") %>%
+mutate_if(is.numeric,coalesce,0)
+
+# Calculate the under/over representation metric
+protein_counts_99 <- protein_counts_99 %>%
+  mutate(under_over_rep = (observed_ratio - expected_ratio)/ expected_ratio)
+
+#Calculate total mutations at IC99
+protein_counts_99<- protein_counts_99 %>% mutate(totalmuations=sum(n))
+
+# Returns df with under/over representation
+  return(list(protein_counts_50,protein_counts_90,protein_counts_99))
+}
+
+#Usage of function:
+protein_counts_rupi <- count_proteins_by_enrichment(df_rupi_full, enrichment_cutoff,viral_protein_lengths)
+protein_counts_guan <- count_proteins_by_enrichment(df_guan_full, enrichment_cutoff,viral_protein_lengths)
+protein_counts_envi <- count_proteins_by_enrichment(df_enviroxime_full, enrichment_cutoff,viral_protein_lengths)
+protein_counts_BrefA <- count_proteins_by_enrichment(df_BrefA_full, enrichment_cutoff,viral_protein_lengths)
+```
+
+
+```{r}
+#This is a function to create manhattan plots to show the enrichment of variants after selection with antivirals at different concentrations and also show under/over representation of viral proteins
+
+plot_enrichment <- function(df, drug_name, enrichment_cutoff, point_size = 0.3, 
+                           xlim = c(863, 2193), ylim = c(0,300),representation,colorlim=c(-1,6)) {
+
+  representation_50 <- representation[[1]]
+  representation_50 <- select(representation_50,viralprotein,under_over_rep)
+  representation_90 <- representation[[2]] 
+  representation_90 <- select(representation_90,viralprotein,under_over_rep)
+  representation_99 <- representation[[3]] 
+  representation_99 <- select(representation_99,viralprotein,under_over_rep)
+
+  df_50 <- df %>% left_join(representation_50, by = "viralprotein")
+  df_90 <- df %>% left_join(representation_90, by = "viralprotein")
+  df_99 <- df %>% left_join(representation_99, by = "viralprotein")
+
+  # IC50 plot
+  plot50 <- ggplot(df_50) +
+        geom_rect(data = EV_Features, aes(xmin = (Start - 743) / 3, xmax = (End - 745) / 3, ymin = 0, ymax = 1000), alpha = rep(times = 1, c(0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15)))+
+    geom_point(aes(position, 2^Mean_Enrichment_IC50,color = under_over_rep), size = point_size) +
+    geom_hline(yintercept = 2^enrichment_cutoff, linetype = 5, color = "black") +
+    theme_classic() +
+    xlab("Residue Position") +
+    ylab("Relative Enrichment") +
+    coord_cartesian(xlim = xlim, ylim = ylim) +
+
+  scale_color_gradient2(limits = colorlim,low = "blue", mid="grey",high = "red",midpoint=0)+
+     theme(legend.position = "none")
+
+  # IC90 plot
+  plot90 <- ggplot(df_90) +
+      geom_rect(data = EV_Features, aes(xmin = (Start - 743) / 3, xmax = (End - 745) / 3, ymin = 0, ymax = 1000), alpha = rep(times = 1, c(0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15)))+
+    geom_point(aes(position, 2^Mean_Enrichment_IC90,color = under_over_rep),size = point_size) +
+    geom_hline(yintercept = 2^enrichment_cutoff, linetype = 5, color = "black") +
+    theme_classic() +
+    xlab("Residue Position") +
+    ylab("Relative Enrichment") +
+    coord_cartesian(xlim = xlim, ylim = ylim) +
+ scale_color_gradient2(limits = colorlim,low = "blue", mid="lightgrey",high = "red",midpoint=0)+
+     theme(legend.position = "none")
+
+  # IC99 plot
+  plot99 <- ggplot(df_99) +
+    geom_rect(data = EV_Features, aes(xmin = (Start - 743) / 3, xmax = (End - 745) / 3, ymin = 0, ymax = 1000), alpha = rep(times = 1, c(0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15)))+
+    geom_point(aes(position, 2^Mean_Enrichment_IC99,color = under_over_rep),size = point_size) +
+    geom_hline(yintercept = 2^enrichment_cutoff, linetype = 5, color = "black") +
+    theme_classic() +
+    xlab("Residue Position") +
+    ylab("Relative Enrichment") +
+    coord_cartesian(xlim = xlim, ylim = ylim) +
+   scale_color_gradient2(limits = colorlim,low = "blue", mid="lightgrey",high = "red",midpoint=0)+
+     theme(legend.position = "none")
+
+ legend_plot <-  ggplot(df_99) +
+       geom_rect(data = EV_Features, aes(xmin = (Start - 743) / 3, xmax = (End - 745) / 3, ymin = 0, ymax = 1000), alpha = rep(times = 1, c(0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15)))+
+    geom_point(aes(position, 2^Mean_Enrichment_IC99,color = under_over_rep),size = point_size) +
+    geom_hline(yintercept = 2^enrichment_cutoff, linetype = 5, color = "black") +
+    theme_classic() +
+    xlab("Residue Position") +
+    ylab("Relative Enrichment") +
+    coord_cartesian(xlim = xlim, ylim = ylim) +
+
+   scale_color_gradient2(limits = colorlim,low = "blue", mid="lightgrey",high = "red",midpoint=0)
+
+#Assembling plots using the cowplot package  
+Assembled_enrichment_plot <- plot_grid(plot50,plot90,plot99,nrow  = 1)
+ 
+#Saving data
+ggsave(plot = Assembled_enrichment_plot, filename = paste0("Enrichment_plot_", drug_name, ".png"), height = 2, width = 9)
+
+ggsave(plot = legend_plot, filename = paste0("Enrichment_plot_legend", drug_name, ".png"), height = 4, width = 4)
+
+#Returning plot
+return(Assembled_enrichment_plot)
+  }
+
+#Usage of function:
+#Rupi
+plot_enrichment(df_rupi_full, drug_name = "rupi", enrichment_cutoff = enrichment_cutoff, ylim = c(0, 25),
+                representation=protein_counts_rupi)
+#Guan
+plot_enrichment(df_guan_full, drug_name = "guan", enrichment_cutoff = enrichment_cutoff, ylim = c(0, 300),representation=protein_counts_guan)
+#Envi
+plot_enrichment(df_enviroxime_full, drug_name = "envi", enrichment_cutoff = enrichment_cutoff, ylim = c(0, 25),representation=protein_counts_envi)
+#BrefA
+plot_enrichment(df_BrefA_full, drug_name = "BrefA", enrichment_cutoff = enrichment_cutoff, ylim = c(0, 65),representation=protein_counts_BrefA)
+```
+
+```{r}
+#This is a function to create a rolling mean of the enrichment scores for the different antivirals at different concentrations
+
+plot_rolling_mean_resistance <- function(df, drug_name, filename_prefix = "Rollingmean_resistance_", 
+                                        window_size = 20, xlim = c(863, 2193), ylim = c(0.5, 4.5)
+                                        ) {
+
+#Creates df for IC50, IC90, and IC99. Groups by position and then identifies the maximum resistance mutation and then calculates rolling mean enrichment
+#Comma after summarize, summarize in R expects multiple functions.
+  
+   df_50 <- df %>%
+   group_by(position) %>%
+     summarize(
+    Site_MFE_Max_Enrichment_IC50 = max(Mean_Enrichment_IC50, na.rm = TRUE),) %>%
+  mutate(rolling_mean = 2^rollmean(Site_MFE_Max_Enrichment_IC50, window_size, fill = NA))
+
+   df_90 <- df %>%
+   group_by(position) %>%
+     summarize(
+    Site_MFE_Max_Enrichment_IC90 = max(Mean_Enrichment_IC90, na.rm = TRUE),) %>%
+  mutate(rolling_mean = 2^rollmean(Site_MFE_Max_Enrichment_IC90, window_size, fill = NA))
+
+ df_99 <- df %>%
+   group_by(position) %>%
+     summarize(
+    Site_MFE_Max_Enrichment_IC99 = max(Mean_Enrichment_IC99, na.rm = TRUE),) %>%
+  mutate(rolling_mean = 2^rollmean(Site_MFE_Max_Enrichment_IC99, window_size, fill = NA))
+
+# Create the plot for rolling mean enrichment
+  plot <- ggplot() +
+    geom_rect(data = EV_Features, aes(xmin = (Start - 743) / 3, xmax = (End - 745) / 3, ymin = ylim[1], ymax = ylim[2]),
+              alpha = rep(times = 1, c(0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15, 0, 0.15)))+
+      geom_line(data = df_50, aes(position, rolling_mean), color = "darkslategray3", linewidth = 0.3) +
+    geom_line(data = df_90, aes(position, rolling_mean), color = "gray", linewidth = 0.3) +
+    geom_line(data = df_99, aes(position, rolling_mean), color = "gray27", linewidth = 0.3) + theme_classic() +    xlab("Residue Position") + ylab("Rolling Mean Enrichment") + coord_cartesian(xlim = xlim, ylim = ylim) 
+
+# Save the plot
+  filename <- paste0(filename_prefix, drug_name, ".png")
+  ggsave(plot = plot, filename = filename, height = 2, width = 3)
+
+  # Return the plot
+  return(plot) 
+}
+
+#Usage of function:
+#Rupi
+plot_rolling_mean_resistance(df_rupi_full, drug_name = "Rupintrivir",ylim = c(1, 4))
+#Guan
+plot_rolling_mean_resistance(df_guan_full, drug_name = "Guan_HCL",ylim = c(1, 7.5))
+#Envi
+plot_rolling_mean_resistance(df_enviroxime_full, drug_name = "Enviroxime",ylim = c(1, 5))
+#BrefA
+plot_rolling_mean_resistance(df_BrefA_full, drug_name = "BrefA",ylim = c(1, 9))
+```
+
+```{r}
+#Function to extract residues from the contact list in chimerax
+
+Extract_residue_chimerax_function <- function(df) {
+
+#Read in dataframe
+df <- read_tsv(file = df, col_names = FALSE)
+# Extract the number after /:A-Z
+df$position <- stringr::str_extract(df$X1, "/[A-Z]:(\\d+)") %>%
+  stringr::str_extract("(\\d+)")
+df <- select(df,position)
+df$position <- as.numeric(df$position)
+
+return(df)
+}
+```
+
+```{r}
+analyze_enrichment_by_contact <- function(mutation_df, contact_text_file, IC_concentration,genestart,geneend,plotname,color) {
+# Extract residues of viralprotein that interact with hostfactor
+Contact_residues <- contact_text_file %>% distinct(position)
+
+# Indexing for the start of the viralprotein
+Contact_residues <- mutate(Contact_residues, position = position + genestart)
+
+# Calculate max enrichment at each position
+
+mutation_df_max <- mutation_df %>% 
+group_by(position) %>% 
+summarize(max_enrichment = 2^max(!!sym(paste0("Mean_Enrichment_", IC_concentration))))
+ 
+# Filter for viralprotein region 
+mutation_df_max <- filter(mutation_df_max, position > genestart & position < geneend)
+
+# Categorizing variants (TRUE if in contact site, FALSE otherwise)
+mutation_df_max <- mutation_df_max %>%
+mutate(contact_TF = position %in% Contact_residues$position)
+
+# Wilcoxon test with rstatix
+wilcox_result_rstatix <- mutation_df_max %>%
+rstatix::wilcox_test(max_enrichment ~ contact_TF)
+
+#Transforming contact_TF to a factor
+mutation_df_max <- mutation_df_max %>% mutate(contact_TF = factor(contact_TF))
+
+#Running wilcoxtest with coin
+wilcox_result_onesided <- coin::wilcox_test(max_enrichment ~ contact_TF, data = mutation_df_max, alternative = "less", distribution = "exact")
+
+wilcox_result_twosided <- coin::wilcox_test(max_enrichment ~ contact_TF, data = mutation_df_max, distribution = "exact")
+
+#Levels of my factors
+levels  <-levels(mutation_df_max$contact_TF)
+
+# Create the boxplot
+boxplot <- ggplot(mutation_df_max, aes(x = contact_TF, y = max_enrichment)) +
+    geom_boxplot(size = 0.15, outlier.size = 0.2, lwd = 0.3, outlier.stroke = 0.15,fill=color) +
+    ylab("max_enrichment") +
+    theme_classic()
+
+ggsave(plot = boxplot, filename = paste0("Box_plot_",plotname, ".pdf"), height = 2, width = 2)
+
+
+  # Return results in a list
+  return(list(mutation_dataframe=mutation_df_max,wilcox_result_rstatix=wilcox_result_rstatix,
+    wilcox_result_onesided = wilcox_result_onesided,
+    wilcox_result_twosided=wilcox_result_twosided,levels=levels,
+    boxplot = boxplot ))
+}
+
+
+```
+
+
+```{r}
+#Focusing structural analysis on Guan and BrefA IC99 mutants in 2C
+
+#Calculating max enrichment in Guan IC99 condition
+df_99_guan_max_2C_chimerax <- df_guan_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC99 = 2^max(Mean_Enrichment_IC99))
+ 
+#Selecting for residues in 2C and selecting only the position and mean_enrichment
+df_99_guan_max_2C_chimerax <- filter(df_99_guan_max_2C_chimerax,position>1111 & position<1441)
+df_99_guan_max_2C_chimerax <- select(df_99_guan_max_2C_chimerax,position,Site_MFE_Max_Enrichment_IC99)
+
+#Reindexing position column to start with the first residue of 2C
+df_99_guan_max_2C_chimerax <- mutate(df_99_guan_max_2C_chimerax,position=position-1111)
+
+#Adapting position to chimerax attribute file
+df_99_guan_max_2C_chimerax$position <- paste("#1/A-F:", df_99_guan_max_2C_chimerax$position, sep = "")
+
+df_99_guan_max_2C_chimerax
+
+write.csv(df_99_guan_max_2C_chimerax,file ="df_99_guan_max_2C_chimerax.csv")
+
+#Calculating max enrichment in BrefA IC99 condition
+df_99_brefA_max_2C_chimerax <- df_BrefA_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC99 = 2^max(Mean_Enrichment_IC99))
+ 
+#Selecting for residues in 2C and selecting only the position and mean_enrichment
+df_99_brefA_max_2C_chimerax <- filter(df_99_brefA_max_2C_chimerax,position>1111 & position<1441)
+df_99_brefA_max_2C_chimerax <- select(df_99_brefA_max_2C_chimerax,position,Site_MFE_Max_Enrichment_IC99)
+
+#Reindexing position column to start with the first residue of 2C
+df_99_brefA_max_2C_chimerax <- mutate(df_99_brefA_max_2C_chimerax,position=position-1111)
+
+#Adapting position to chimerax attribute file
+df_99_brefA_max_2C_chimerax$position <- paste("#1/A-F:", df_99_brefA_max_2C_chimerax$position, sep = "")
+
+df_99_brefA_max_2C_chimerax
+
+write.csv(df_99_brefA_max_2C_chimerax,file ="df_99_brefA_max_2C_chimerax.csv")
+
+```
+
+```{r}
+#Asking what are the differences in enrichment scores if residues are in interaction between 2C and Arf1
+
+#Extracting residues of 2C that interact with Arf1
+Contact_residue2C_withArf1 <- Extract_residue_chimerax_function("Contact_2C_residues_Arf1GTP.txt")
+Contact_residue2C_withArf1 <- Contact_residue2C_withArf1 %>% distinct(position)
+
+EV_A71_2C_Arf1_contact_list_BrefA_IC99 <- analyze_enrichment_by_contact(df_BrefA_full, Contact_residue2C_withArf1, "IC99",genestart=1111,geneend=1441,"EV_A71_2C_Arf1_contact_list_BrefA_IC99","#C4C4C4")
+
+EV_A71_2C_Arf1_contact_list_BrefA_IC99
+
+
+```
+
+```{r}
+#Focusing structural analysis on GuanHCL and IC99 mutants in 2C
+
+#Selecting for viral protein and adjusting position to start of 2C
+Mutants_2C_guan_resistance <- df_guan_full %>% filter(viralprotein=="2C") %>% 
+mutate(viralproteinposition=position-1111) 
+
+#Filtering only the residues of interest
+Mutants_2C_guan_resistance <- filter(Mutants_2C_guan_resistance,viralproteinposition=="173"|viralproteinposition=="179"|viralproteinposition=="185"|viralproteinposition=="224"|viralproteinposition=="321"|viralproteinposition=="244")
+
+
+#Selecting for only columns of interest
+Mutants_2C_guan_resistance <- select(Mutants_2C_guan_resistance,hgvs,Mean_Enrichment_IC99,mean_score_control,viralproteinposition) 
+
+#Arrange by desc for mean_score_IC99_enrichment
+Mutants_2C_guan_resistance <- arrange(Mutants_2C_guan_resistance,desc(Mean_Enrichment_IC99))
+
+Mutants_2C_guan_resistance
+```
+
+
+```{r}
+#Focusing structural analysis on BrefA and IC99 mutants in 2C
+
+#Selecting for viral protein and adjusting position to start of 2C
+Mutants_2C_BrefA_resistance <- df_BrefA_full %>% filter(viralprotein=="2C") %>% 
+mutate(viralproteinposition=position-1111) 
+
+#Filtering only the residues of interest
+Mutants_2C_BrefA_resistance <- filter(Mutants_2C_BrefA_resistance,viralproteinposition=="41"|viralproteinposition=="72")
+
+#Selecting for only columns of interest
+Mutants_2C_BrefA_resistance <- select(Mutants_2C_BrefA_resistance,hgvs,Mean_Enrichment_IC99,mean_score_control,viralproteinposition) 
+
+#Arrange by desc for mean_score_IC99_enrichment
+Mutants_2C_BrefA_resistance <- arrange(Mutants_2C_BrefA_resistance,desc(Mean_Enrichment_IC99))
+
+Mutants_2C_BrefA_resistance
+```
+
+```{r}
+#Focusing structural analysis on Enviroxime and BrefA IC99 mutants in 3A
+
+#Calculating max enrichment in Enviroxime IC99 condition
+df_99_envi_max_3A_chimerax <- df_enviroxime_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC99 = 2^max(Mean_Enrichment_IC99))
+ 
+#Selecting for residues in 3A and selecting only the position and max_enrichment
+df_99_envi_max_3A_chimerax <- filter(df_99_envi_max_3A_chimerax,position>1440 & position<1527)
+df_99_envi_max_3A_chimerax <- select(df_99_envi_max_3A_chimerax,position,Site_MFE_Max_Enrichment_IC99)
+
+#Reindexing position column to start with the first residue of 3A
+df_99_envi_max_3A_chimerax <- mutate(df_99_envi_max_3A_chimerax,position=position-1440)
+
+#Adapting position to chimerax attribute file
+df_99_envi_max_3A_chimerax$position <- paste("#1/A-B:", df_99_envi_max_3A_chimerax$position, sep = "")
+
+df_99_envi_max_3A_chimerax
+
+write.csv(df_99_envi_max_3A_chimerax,file ="df_99_envi_max_3A_chimerax.csv")
+
+#Calculating max enrichment in Enviroxime IC90 condition
+df_90_envi_max_3A_chimerax <- df_enviroxime_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC90 = 2^max(Mean_Enrichment_IC90))
+ 
+#Selecting for residues in 3A and selecting only the position and max_enrichment
+df_90_envi_max_3A_chimerax <- filter(df_90_envi_max_3A_chimerax,position>1440 & position<1527)
+df_90_envi_max_3A_chimerax <- select(df_90_envi_max_3A_chimerax,position,Site_MFE_Max_Enrichment_IC90)
+
+#Reindexing position column to start with the first residue of 3A
+df_90_envi_max_3A_chimerax <- mutate(df_90_envi_max_3A_chimerax,position=position-1440)
+
+#Adapting position to chimerax attribute file
+df_90_envi_max_3A_chimerax$position <- paste("#1/A-B:", df_90_envi_max_3A_chimerax$position, sep = "")
+
+df_90_envi_max_3A_chimerax
+
+write.csv(df_90_envi_max_3A_chimerax,file ="df_90_envi_max_3A_chimerax.csv")
+
+#Calculating max enrichment in BrefA IC99 condition
+df_99_BrefA_max_3A_chimerax <- df_BrefA_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC99 = 2^max(Mean_Enrichment_IC99))
+ 
+#Selecting for residues in 2C and selecting only the position and max_enrichment
+df_99_BrefA_max_3A_chimerax <- filter(df_99_BrefA_max_3A_chimerax,position>1440 & position<1527)
+df_99_BrefA_max_3A_chimerax <- select(df_99_BrefA_max_3A_chimerax,position,Site_MFE_Max_Enrichment_IC99)
+
+#Reindexing position column to start with the first residue of 3A
+df_99_BrefA_max_3A_chimerax <- mutate(df_99_BrefA_max_3A_chimerax,position=position-1440)
+
+#Adapting position to chimerax attribute file
+df_99_BrefA_max_3A_chimerax$position <- paste("#1/A-B:", df_99_BrefA_max_3A_chimerax$position, sep = "")
+
+df_99_BrefA_max_3A_chimerax
+
+write.csv(df_99_BrefA_max_3A_chimerax,file ="df_99_BrefA_max_3A_chimerax.csv")
+```
+
+```{r}
+#Asking what are the differences in enrichment scores if residues are in interaction between 3A and PI4K/ACBD3 at IC90 and IC99
+
+#Extracting residues of 3A that interact with PI4K
+Contact_residue3A_withPI4K <- Extract_residue_chimerax_function("Contact_3A_residues_PI4K.txt")
+Contact_residue3A_withPI4K <- Contact_residue3A_withPI4K %>% distinct(position)
+
+#Extracting residues of 3A that interact with ACBD3
+Contact_residue3A_withACBD3 <- Extract_residue_chimerax_function("Contact_3A_residues_ACBD3.txt")
+Contact_residue3A_withACBD3 <- Contact_residue3A_withACBD3 %>% distinct(position)
+
+#Analyzing contact list between 3A and PI4K at IC90 enrichment
+EV_A71_3A_PI4K_contact_list_Enviroxime_IC90 <- analyze_enrichment_by_contact(df_enviroxime_full, Contact_residue3A_withPI4K, "IC90",genestart=1440,geneend=1527,"EV_A71_3A_PI4K_contact_list_Enviroxime_IC90","#7B7B7B")
+EV_A71_3A_PI4K_contact_list_Enviroxime_IC90
+
+#Analyzing contact list between 3A and PI4K at IC99 enrichment
+EV_A71_3A_PI4K_contact_list_Enviroxime_IC99 <- analyze_enrichment_by_contact(df_enviroxime_full, Contact_residue3A_withPI4K, "IC99",genestart=1440,geneend=1527,"EV_A71_3A_PI4K_contact_list_Enviroxime_IC99","#7B7B7B")
+EV_A71_3A_PI4K_contact_list_Enviroxime_IC99
+
+#Analyzing contact list between 3A and ACBD3 at IC90 enrichment
+EV_A71_3A_ACBD3_contact_list_Enviroxime_IC90 <- analyze_enrichment_by_contact(df_enviroxime_full, Contact_residue3A_withACBD3, "IC90",genestart=1440,geneend=1527,"EV_A71_3A_ACBD3_contact_list_Enviroxime_IC90","#81A9DA")
+
+EV_A71_3A_ACBD3_contact_list_Enviroxime_IC90
+
+#Analyzing contact list between 3A and ACBD3 at IC99 enrichment
+EV_A71_3A_ACBD3_contact_list_Enviroxime_IC99 <- analyze_enrichment_by_contact(df_enviroxime_full, Contact_residue3A_withACBD3, "IC99",genestart=1440,geneend=1527,"EV_A71_3A_ACBD3_contact_list_Enviroxime_IC99","#81A9DA")
+
+EV_A71_3A_ACBD3_contact_list_Enviroxime_IC99
+```
+
+
+```{r}
+#Extracting residues of 3A that interact with GBF1
+Contact_residue3A_withGBF1 <- Extract_residue_chimerax_function("Contact_3A_residues_GBF1.txt")
+Contact_residue3A_withGBF1 <- Contact_residue3A_withGBF1 %>% distinct(position)
+
+#Analyzing contact list between 3A and GBF1 at IC99 brefA enrichment
+EV_A71_3A_GBF1_contact_list_BrefA_IC99 <- analyze_enrichment_by_contact(df_BrefA_full, Contact_residue3A_withGBF1, "IC99",genestart=1440,geneend=1527,"EV_A71_3A_GBF1_contact_list_BrefA_IC99","#A7D6A5")
+
+EV_A71_3A_GBF1_contact_list_BrefA_IC99
+
+#Asking if the resistance to enviroxime can be explained through the lens of GBF1:
+
+#Analyzing contact list between 3A and GBF1 at IC90 enrichment Enviroxime
+EV_A71_3A_GBF1_contact_list_Enviroxime_IC90 <- analyze_enrichment_by_contact(df_enviroxime_full, Contact_residue3A_withGBF1, "IC90",genestart=1440,geneend=1527,"EV_A71_3A_GBF1_contact_list_Enviroxime_IC90","white")
+
+EV_A71_3A_GBF1_contact_list_Enviroxime_IC90
+
+#Analyzing contact list between 3A and GBF1 at IC99 enrichment enviroxime
+EV_A71_3A_GBF1_contact_list_Enviroxime_IC99 <- analyze_enrichment_by_contact(df_enviroxime_full, Contact_residue3A_withGBF1, "IC99",genestart=1440,geneend=1527,"EV_A71_3A_GBF1_contact_list_Enviroxime_IC99","white")
+
+EV_A71_3A_GBF1_contact_list_Enviroxime_IC99
+```
+
+```{r}
+#Focusing structural analysis on BrefA and IC99 mutants in 3A
+
+#Selecting for viral protein and adjusting position to start of 3A
+Mutants_3A_BrefA_resistance <- df_BrefA_full %>% filter(viralprotein=="3A") %>% 
+mutate(viralproteinposition=position-1440) 
+
+#Filtering only the residues of interest
+Mutants_3A_BrefA_resistance <- filter(Mutants_3A_BrefA_resistance,viralproteinposition=="16"|viralproteinposition=="27"|viralproteinposition=="29")
+
+#Selecting for only columns of interest
+Mutants_3A_BrefA_resistance <- select(Mutants_3A_BrefA_resistance,hgvs,Mean_Enrichment_IC99,mean_score_control,viralproteinposition) 
+
+#Arrange by desc for mean_score_IC99_enrichment
+Mutants_3A_BrefA_resistance <- arrange(Mutants_3A_BrefA_resistance,desc(Mean_Enrichment_IC99))
+
+Mutants_3A_BrefA_resistance
+```
+
+```{r}
+#Focusing structural analysis on Enviroxime IC90 and IC99 mutants in 3A
+
+#Selecting for viral protein and adjusting position to start of 3A
+Mutants_3A_enviroxime_resistance <- df_enviroxime_full %>% filter(viralprotein=="3A") %>% 
+mutate(viralproteinposition=position-1440) 
+
+#Filtering only the residues of interest
+Mutants_3A_enviroxime_resistance <- filter(Mutants_3A_enviroxime_resistance,viralproteinposition=="8"|viralproteinposition=="19"|viralproteinposition=="48")
+
+#Selecting for only columns of interest
+Mutants_3A_enviroxime_resistance <- select(Mutants_3A_enviroxime_resistance,hgvs,Mean_Enrichment_IC90,Mean_Enrichment_IC99,mean_score_control,viralproteinposition) 
+
+#Arrange by desc for mean_score_IC90_enrichment
+Mutants_3A_enviroxime_resistance_90 <- arrange(Mutants_3A_enviroxime_resistance,desc(Mean_Enrichment_IC90))
+Mutants_3A_enviroxime_resistance_90
+
+#Arrange by desc for mean_score_IC99_enrichment
+Mutants_3A_enviroxime_resistance_99 <- arrange(Mutants_3A_enviroxime_resistance,desc(Mean_Enrichment_IC99))
+Mutants_3A_enviroxime_resistance_99
+
+```
+
+
+```{r}
+#Focusing structural analysis on Rupintrivir IC90 and IC99 mutants in 3C
+
+#Calculating max enrichment in Rupintrivir IC90 condition
+df_90_rupi_max_3C_chimerax <- df_rupi_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC90 = 2^max(Mean_Enrichment_IC90))
+ 
+#Selecting for residues in 3C and selecting only the position and max_enrichment
+df_90_rupi_max_3C_chimerax <- filter(df_90_rupi_max_3C_chimerax,position>1548 & position<1732)
+df_90_rupi_max_3C_chimerax <- select(df_90_rupi_max_3C_chimerax,position,Site_MFE_Max_Enrichment_IC90)
+
+#Reindexing position column to start with the first residue of 3C
+df_90_rupi_max_3C_chimerax <- mutate(df_90_rupi_max_3C_chimerax,position=position-1548)
+
+#Adapting position to chimerax attribute file
+df_90_rupi_max_3C_chimerax$position <- paste("#1/A:", df_90_rupi_max_3C_chimerax$position, sep = "")
+
+df_90_rupi_max_3C_chimerax
+
+write.csv(df_90_rupi_max_3C_chimerax,file ="df_90_rupi_max_3C_chimerax.csv")
+
+#Calculating max enrichment in Rupintrivir IC99 condition
+df_99_rupi_max_3C_chimerax <- df_rupi_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC99 = 2^max(Mean_Enrichment_IC99))
+ 
+#Selecting for residues in 3C and selecting only the position and max_enrichment
+df_99_rupi_max_3C_chimerax <- filter(df_99_rupi_max_3C_chimerax,position>1548 & position<1732)
+df_99_rupi_max_3C_chimerax <- select(df_99_rupi_max_3C_chimerax,position,Site_MFE_Max_Enrichment_IC99)
+
+#Reindexing position column to start with the first residue of 3C
+df_99_rupi_max_3C_chimerax <- mutate(df_99_rupi_max_3C_chimerax,position=position-1548)
+
+#Adapting position to chimerax attribute file
+df_99_rupi_max_3C_chimerax$position <- paste("#1/A:", df_99_rupi_max_3C_chimerax$position, sep = "")
+
+df_99_rupi_max_3C_chimerax
+
+write.csv(df_99_rupi_max_3C_chimerax,file ="df_99_rupi_max_3C_chimerax.csv")
+
+```
+
+
+```{r}
+#Focusing structural analysis on Rupintrivir IC90 and IC99 mutants in 2A
+
+#Calculating max enrichment in Rupintrivir IC90 condition
+df_90_rupi_max_2A_chimerax <- df_rupi_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC90 = 2^max(Mean_Enrichment_IC90))
+ 
+#Selecting for residues in 3C and selecting only the position and max_enrichment
+df_90_rupi_max_2A_chimerax <- filter(df_90_rupi_max_2A_chimerax,position>862 & position<1013)
+df_90_rupi_max_2A_chimerax <- select(df_90_rupi_max_2A_chimerax,position,Site_MFE_Max_Enrichment_IC90)
+
+#Reindexing position column to start with the first residue of 3C
+df_90_rupi_max_2A_chimerax <- mutate(df_90_rupi_max_2A_chimerax,position=position-862)
+
+#Adapting position to chimerax attribute file
+df_90_rupi_max_2A_chimerax$position <- paste("#1/A:", df_90_rupi_max_2A_chimerax$position, sep = "")
+
+df_90_rupi_max_2A_chimerax
+
+write.csv(df_90_rupi_max_2A_chimerax,file ="df_90_rupi_max_2A_chimerax.csv")
+
+#Calculating max enrichment in Rupintrivir IC99 condition
+df_99_rupi_max_2A_chimerax <- df_rupi_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC99 = 2^max(Mean_Enrichment_IC99))
+ 
+#Selecting for residues in 3C and selecting only the position and max_enrichment
+df_99_rupi_max_2A_chimerax <- filter(df_99_rupi_max_2A_chimerax,position>862 & position<1013)
+df_99_rupi_max_2A_chimerax <- select(df_99_rupi_max_2A_chimerax,position,Site_MFE_Max_Enrichment_IC99)
+
+#Reindexing position column to start with the first residue of 3C
+df_99_rupi_max_2A_chimerax <- mutate(df_99_rupi_max_2A_chimerax,position=position-862)
+
+#Adapting position to chimerax attribute file
+df_99_rupi_max_2A_chimerax$position <- paste("#1/A:", df_99_rupi_max_2A_chimerax$position, sep = "")
+
+df_99_rupi_max_2A_chimerax
+
+write.csv(df_99_rupi_max_2A_chimerax,file ="df_99_rupi_max_2A_chimerax.csv")
+```
+
+```{r}
+#Focusing structural analysis on Rupintrivir IC99 mutants in 2A
+
+#Selecting for viral protein and adjusting position to start of 2A
+Mutants_2A_prolines <- df_rupi_full %>% filter(viralprotein=="2A") %>% 
+mutate(viralproteinposition=position-862) 
+
+#Filtering only the residues of interest
+Mutants_2A_prolines <- filter(Mutants_2A_prolines,viralproteinposition=="91"|viralproteinposition=="107")
+
+#Selecting for only columns of interest
+Mutants_2A_prolines <- select(Mutants_2A_prolines,hgvs,Mean_Enrichment_IC90,Mean_Enrichment_IC99,mean_score_control,viralproteinposition,SD_Enrichment_IC90,SD_Enrichment_IC99) 
+
+#Arrange by desc for mean_score_IC99_enrichment
+Mutants_2A_prolines_90 <- arrange(Mutants_2A_prolines,desc(Mean_Enrichment_IC90))
+Mutants_2A_prolines_90
+
+Mutants_2A_prolines_99 <- arrange(Mutants_2A_prolines,desc(Mean_Enrichment_IC99))
+Mutants_2A_prolines_99
+
+```
+
+```{r}
+#Focusing structural analysis on Rupintrivir IC90 or IC99 mutants in 3C
+
+#Selecting for viral protein and adjusting position to start of 3C
+Mutants_3C_rupi_resistance <- df_rupi_full %>% filter(viralprotein=="3C") %>% 
+mutate(viralproteinposition=position-1548) 
+
+#Filtering only the two residues of interest
+Mutants_3C_rupi_resistance <- filter(Mutants_3C_rupi_resistance,viralproteinposition=="130"|viralproteinposition=="39"|viralproteinposition=="101"|viralproteinposition=="96")
+
+#Selecting for only columns of interest
+Mutants_3C_rupi_resistance <- select(Mutants_3C_rupi_resistance,hgvs,Mean_Enrichment_IC90,Mean_Enrichment_IC99,mean_score_control,viralproteinposition,SD_Enrichment_IC90,SD_Enrichment_IC99) 
+
+#Arrange by desc for mean_score_IC99_enrichment
+Mutants_3C_rupi_resistance_90 <- arrange(Mutants_3C_rupi_resistance,desc(Mean_Enrichment_IC90))
+
+Mutants_3C_rupi_resistance_90
+
+#Arrange by desc for mean_score_IC99_enrichment
+Mutants_3C_rupi_resistance_99 <- arrange(Mutants_3C_rupi_resistance,desc(Mean_Enrichment_IC99))
+
+Mutants_3C_rupi_resistance_99
+```
+
+```{r}
+#Add label for drug and select columns of interest
+Guan<- df_guan_full
+Guan$label<-"Guanidine HCl"
+Guan <- select(Guan,hgvs,Aminoacid,position,viralprotein,mean_score_control,Mean_Enrichment_IC50,Mean_Enrichment_IC90,Mean_Enrichment_IC99,label)
+Rupi<- df_rupi_full
+Rupi$label<-"Rupintrivir"
+Rupi <- select(Rupi,hgvs,Aminoacid,position,viralprotein,mean_score_control,Mean_Enrichment_IC50,Mean_Enrichment_IC90,Mean_Enrichment_IC99,label)
+BrefA<- df_BrefA_full
+BrefA$label<-"BrefeldinA"
+BrefA <- select(BrefA,hgvs,Aminoacid,position,viralprotein,mean_score_control,Mean_Enrichment_IC50,Mean_Enrichment_IC90,Mean_Enrichment_IC99,label)
+Envi<- df_enviroxime_full
+Envi$label<-"Enviroxime"
+Envi <- select(Envi,hgvs,Aminoacid,position,viralprotein,mean_score_control,Mean_Enrichment_IC50,Mean_Enrichment_IC90,Mean_Enrichment_IC99,label)
+
+#Bind rows to create a dataframe with all drugs
+alldrugs<-bind_rows(Guan,Rupi,BrefA,Envi)
+
+#Organize the drug labels
+alldrugs$label=factor(alldrugs$label,levels = c("Guanidine HCl","Rupintrivir","BrefeldinA","Enviroxime"))
+   
+#Create a T/F matrix if the variants pass the resistance threshold or not.           
+alldrugs <- alldrugs %>% mutate(resistant_50 = Mean_Enrichment_IC50>enrichment_cutoff)
+alldrugs <- alldrugs %>% mutate(resistant_90 = Mean_Enrichment_IC90>enrichment_cutoff)
+alldrugs <- alldrugs %>% mutate(resistant_99 = Mean_Enrichment_IC99>enrichment_cutoff)
+
+#Create a dataframe according to the variants that pass the cutoff for each concentration
+alldrugs_resistant_50 <- filter(alldrugs,resistant_50=="TRUE")
+alldrugs_resistant_90 <- filter(alldrugs,resistant_90=="TRUE")
+alldrugs_resistant_99 <- filter(alldrugs,resistant_99=="TRUE")
+
+Alldrugs_geompoint_IC50 <- ggplot(alldrugs_resistant_50)+ 
+geom_point(aes(position,y=2^Mean_Enrichment_IC50,color=mean_score_control))+
+      facet_grid(vars(label),scales="free_y")+scale_color_viridis_c(limits=c(-6,2.5))+xlim(863,2200)+
+      theme_bw()+ theme(legend.position = "none")
+
+Alldrugs_geompoint_IC90 <- ggplot(alldrugs_resistant_90)+ 
+geom_point(aes(position,y=2^Mean_Enrichment_IC90,color=mean_score_control))+
+      facet_grid(vars(label),scales="free_y")+scale_color_viridis_c(limits=c(-6,2.5))+xlim(863,2200)+
+      theme_bw()+ theme(legend.position = "none")
+
+Alldrugs_geompoint_IC99 <- ggplot(alldrugs_resistant_99)+ 
+geom_point(aes(position,y=2^Mean_Enrichment_IC99,color=mean_score_control))+
+      facet_grid(vars(label),scales="free_y")+scale_color_viridis_c(limits=c(-6,2.5))+xlim(863,2200)+
+      theme_bw()+ theme(legend.position = "none")
+
+Alldrugs_geompoint_legend <- ggplot(alldrugs_resistant_99)+ 
+geom_point(aes(position,y=2^Mean_Enrichment_IC99,color=mean_score_control))+
+      facet_grid(vars(label),scales="free_y")+scale_color_viridis_c(limits=c(-6,2.5))+xlim(863,2200)+
+     theme_bw()
+
+Alldrugs_geompoint <- plot_grid(Alldrugs_geompoint_IC50,Alldrugs_geompoint_IC90,Alldrugs_geompoint_IC99,ncol= 3)
+Alldrugs_geompoint
+
+ggsave(plot = Alldrugs_geompoint, filename = "Alldrugs_geompoint.pdf", height = 6, width = 6)
+
+ggsave(plot = Alldrugs_geompoint_legend, filename = "Alldrugs_geompoint_legend.pdf", height = 6, width = 6)
+
+
+Alldrugs_geombar_IC50 <- ggplot(alldrugs_resistant_50)+geom_bar(aes(viralprotein,group=round(mean_score_control,0),fill=round(mean_score_control,0)),stat = 'count')+facet_grid(vars(label),scales="free_y")+scale_fill_viridis_c(limits=c(-6,2.5))+theme_bw()+ theme(legend.position = "none")
+
+Alldrugs_geombar_IC90 <- ggplot(alldrugs_resistant_90)+geom_bar(aes(viralprotein,group=round(mean_score_control,0),fill=round(mean_score_control,0)),stat = 'count')+facet_grid(vars(label),scales="free_y")+scale_fill_viridis_c(limits=c(-6,2.5))+theme_bw()+ theme(legend.position = "none")
+
+Alldrugs_geombar_IC99 <-ggplot(alldrugs_resistant_99)+geom_bar(aes(viralprotein,group=round(mean_score_control,0),fill=round(mean_score_control,0)),stat = 'count')+facet_grid(vars(label),scales="free_y")+scale_fill_viridis_c(limits=c(-6,2.5))+theme_bw()+ theme(legend.position = "none")
+
+Alldrugs_geombar_legend <-ggplot(alldrugs_resistant_99)+geom_bar(aes(viralprotein,group=round(mean_score_control,0),fill=round(mean_score_control,0)),stat = 'count')+facet_grid(vars(label))+scale_fill_viridis_c(limits=c(-6,2.5))+theme_bw()
+
+ggsave(plot = Alldrugs_geombar_legend, filename = "Alldrugs_geombar_legend.pdf", height = 6, width = 6)
+
+Alldrugs_geombar <- plot_grid(Alldrugs_geombar_IC50,Alldrugs_geombar_IC90,Alldrugs_geombar_IC99,ncol= 3)
+Alldrugs_geombar
+
+ggsave(plot = Alldrugs_geombar, filename = "Alldrugs_geombar.pdf", height = 6, width = 6)
+
+```
+
+```{r}
+# This function is used to create a cutoff of low,mid,high variant scores of the control condition by considering that the boundaries of the midscores are  SD-1 and SD+1
+
+analyze_fitness_scores <- function(df,drug_name) {
+
+# Extract fitness scores from the specified columns creating a df that contains the fitness scores of the control condition
+fitness_scores <- df$mean_score_control
+
+# Calculate the standard deviation of fitness scores
+sd_fitness <- sd(fitness_scores)
+
+# Define cutoffs based on -1 and +1 standard deviations
+  cutoff_low <- -1 * sd_fitness
+  cutoff_high <- 1 * sd_fitness
+
+# Generate q-q plot to check for normality
+  qqnorm(fitness_scores, main = "QQ Plot of Fitness Scores")
+  qqline(fitness_scores, col = "red")
+
+# Visualize distribution of fitness score data
+  hist(fitness_scores, breaks = 30, col = "lightblue", freq = FALSE,
+       xlab = "Fitness Scores", main = "Histogram of Fitness Scores")
+  curve(dnorm(x, mean = mean(fitness_scores), sd = sd(fitness_scores)),
+        col = "red", lwd = 2, add = TRUE)
+
+ # Return a list containing the results with drug name
+  return(list(
+    drug_name = drug_name,  
+    sd_fitness = sd_fitness,
+    cutoff_low = cutoff_low,
+    cutoff_high = cutoff_high
+  ))
+}
+
+#Usage of function:
+fitness_sd_rupi <- analyze_fitness_scores(df_rupi_full,"rupi")
+print(fitness_sd_rupi)
+fitness_sd_guan <- analyze_fitness_scores(df_guan_full,"guan")
+print(fitness_sd_guan)
+fitness_sd_envi <- analyze_fitness_scores(df_enviroxime_full,"envi")
+print(fitness_sd_envi)
+fitness_sd_BrefA <- analyze_fitness_scores(df_BrefA_full,"BrefA")
+print(fitness_sd_BrefA)
+
+```
+
+```{r}
+# Function to calculate enrichment scores for a given enrichment cutoff
+calculate_enrichment_fitness_scores <- function(df,enrichment_cutoff,cutoff_low,cutoff_high) {
+
+#Select control score and enrichment IC50
+df_50 <- select(df,mean_score_control,Mean_Enrichment_IC50)
+
+#Adding a label group for variants that have either low,mid,high fitness scores in control condition
+df_50 <- df_50 %>%
+  mutate(score_group_label = case_when(
+   mean_score_control < cutoff_low ~ "Low",
+    mean_score_control >= cutoff_low & mean_score_control <= cutoff_high ~ "Medium",
+    mean_score_control > cutoff_high ~ "High",
+    TRUE ~ "Other" 
+  ))
+
+# Calculating the overall pass rate of mutants that have > than enrichment cutoff
+p_pass_50 <- sum(df_50$Mean_Enrichment_IC50 > enrichment_cutoff) / nrow(df_50)
+
+# Grouping mutations by score label and calculating expected vs observed enrichment of mutation types
+  Enrichment_groupscores_50 <- df_50 %>% 
+    group_by(score_group_label) %>%
+    summarize(
+      total_mutations = n(),
+      observed_pass = sum(Mean_Enrichment_IC50 > enrichment_cutoff),
+      expected_pass = total_mutations * p_pass_50,
+      Enrichment_groupscores = (observed_pass - expected_pass) / expected_pass
+    )
+
+#Select control score and enrichment IC90
+df_90 <- select(df,mean_score_control,Mean_Enrichment_IC90)
+
+#Adding a label group for variants that have either low,mid,high fitness scores in control condition
+df_90 <- df_90 %>%
+  mutate(score_group_label = case_when(
+   mean_score_control < cutoff_low ~ "Low",
+    mean_score_control >= cutoff_low & mean_score_control <= cutoff_high ~ "Medium",
+    mean_score_control > cutoff_high ~ "High",
+    TRUE ~ "Other" 
+  ))
+
+# Calculating the overall pass rate of mutants that have >= than enrichment cutoff
+p_pass_90 <- sum(df_90$Mean_Enrichment_IC90 > enrichment_cutoff) / nrow(df_90)
+
+# Grouping mutations by score label and calculating expected vs observed enrichment of mutation types
+  Enrichment_groupscores_90 <- df_90 %>% 
+    group_by(score_group_label) %>%
+    summarize(
+      total_mutations = n(),
+      observed_pass = sum(Mean_Enrichment_IC90 > enrichment_cutoff),
+      expected_pass = total_mutations * p_pass_90,
+      Enrichment_groupscores = (observed_pass - expected_pass) / expected_pass
+    )
+  
+
+#Select control score and enrichment IC99
+df_99 <- select(df,mean_score_control,Mean_Enrichment_IC99)
+
+#Adding a label group for variants that have either low,mid,high fitness scores in control condition
+df_99 <- df_99 %>%
+  mutate(score_group_label = case_when(
+   mean_score_control < cutoff_low ~ "Low",
+    mean_score_control >= cutoff_low & mean_score_control <= cutoff_high ~ "Medium",
+    mean_score_control > cutoff_high ~ "High",
+    TRUE ~ "Other" 
+  ))
+
+# Calculating the overall pass rate of mutants that have >= than enrichment cutoff
+p_pass_99 <- sum(df_99$Mean_Enrichment_IC99 > enrichment_cutoff) / nrow(df_99)
+
+# Grouping mutations by score label and calculating expected vs observed enrichment of mutation types
+  Enrichment_groupscores_99 <- df_99 %>% 
+    group_by(score_group_label) %>%
+    summarize(
+      total_mutations = n(),
+      observed_pass = sum(Mean_Enrichment_IC99 > enrichment_cutoff),
+      expected_pass = total_mutations * p_pass_99,
+      Enrichment_groupscores = (observed_pass - expected_pass) / expected_pass
+    )
+
+  # Return the result as a list of dataframes
+  return(list(Enrichment_groupscores_50,Enrichment_groupscores_90,Enrichment_groupscores_99))
+}
+
+#Usage of function:
+enrichment_fitness_scores_rupi <- calculate_enrichment_fitness_scores(df_rupi_full, enrichment_cutoff = enrichment_cutoff, cutoff_low = fitness_sd_rupi$cutoff_low, cutoff_high = fitness_sd_rupi$cutoff_high)
+
+enrichment_fitness_scores_guan <- calculate_enrichment_fitness_scores(df_guan_full, enrichment_cutoff = enrichment_cutoff, cutoff_low = fitness_sd_guan$cutoff_low, cutoff_high = fitness_sd_guan$cutoff_high)
+
+enrichment_fitness_scores_envi <- calculate_enrichment_fitness_scores(df_enviroxime_full, enrichment_cutoff = enrichment_cutoff, cutoff_low = fitness_sd_envi$cutoff_low, cutoff_high = fitness_sd_envi$cutoff_high)
+
+enrichment_fitness_scores_BrefA <- calculate_enrichment_fitness_scores(df_BrefA_full, enrichment_cutoff = enrichment_cutoff, cutoff_low = fitness_sd_BrefA$cutoff_low, cutoff_high = fitness_sd_BrefA$cutoff_high)
+```
+
+```{r}
+#This is a function to plot on the x-axis the variant score in control conditions and on the y-axis the enrichment scores for each variant after treatment with antiviral
+
+plot_escape_metrics <- function(df, drug_name, enrichment_cutoff, cutoff_low, cutoff_high,
+                                point_size = 0.3, 
+                               xlim = c(-8, 8), ylim = c(0, 250),Enrichment_groupscores) {
+
+#Extracts the enrichmentgroupscores for IC50
+Enrichment_groupscores_50 <- Enrichment_groupscores[[1]]
+Enrichment_groupscores_50 <- select(Enrichment_groupscores_50,score_group_label,Enrichment_groupscores)
+  
+#Creates a dataframe with only control score and enrichment
+df_50 <- select(df,mean_score_control,Mean_Enrichment_IC50)
+
+#Adding a label group for variants that have either low,mid,high fitness scores in control condition
+df_50 <- df_50 %>%
+  mutate(score_group_label = case_when(
+   mean_score_control < cutoff_low ~ "Low",
+    mean_score_control >= cutoff_low & mean_score_control <= cutoff_high ~ "Medium",
+    mean_score_control > cutoff_high ~ "High",
+    TRUE ~ "Other" 
+  ))
+
+#Left join the enrichment of certain group scores to the corresponding dataframes
+df_50 <- df_50 %>% left_join(Enrichment_groupscores_50, by = "score_group_label")
+
+#Extracts the enrichment groupscores for IC90
+Enrichment_groupscores_90 <- Enrichment_groupscores[[2]]
+Enrichment_groupscores_90 <- select(Enrichment_groupscores_90,score_group_label,Enrichment_groupscores)
+  
+#Creates a dataframe with only control score and enrichment
+df_90 <- select(df,mean_score_control,Mean_Enrichment_IC90)
+
+#Adding a label group for variants that have either low,mid,high fitness scores in control condition
+df_90 <- df_90 %>%
+  mutate(score_group_label = case_when(
+   mean_score_control < cutoff_low ~ "Low",
+    mean_score_control >= cutoff_low & mean_score_control <= cutoff_high ~ "Medium",
+    mean_score_control > cutoff_high ~ "High",
+    TRUE ~ "Other" 
+  ))
+
+#Left join the enrichment of certain group scores to the corresponding dataframes
+  df_90 <- df_90 %>% left_join(Enrichment_groupscores_90, by = "score_group_label")
+ 
+#Extracts the enrichment groupscores for IC99
+Enrichment_groupscores_99 <- Enrichment_groupscores[[3]]
+Enrichment_groupscores_99 <- select(Enrichment_groupscores_99,score_group_label,Enrichment_groupscores)
+ 
+#Creates a dataframe with only control score and enrichment
+df_99 <- select(df,mean_score_control,Mean_Enrichment_IC99)
+
+#Adding a label group for variants that have either low,mid,high fitness scores in control condition
+df_99 <- df_99 %>%
+  mutate(score_group_label = case_when(
+   mean_score_control < cutoff_low ~ "Low",
+    mean_score_control >= cutoff_low & mean_score_control <= cutoff_high ~ "Medium",
+    mean_score_control > cutoff_high ~ "High",
+    TRUE ~ "Other" 
+  ))
+
+#Left join the enrichment of certain group scores to the corresponding dataframes
+  df_99 <- df_99 %>% left_join(Enrichment_groupscores_99, by = "score_group_label")
+ 
+# IC50 plot
+  plot50 <- ggplot() +
+    geom_point(data= df_50,aes(mean_score_control, 2^Mean_Enrichment_IC50, color = Enrichment_groupscores),size = point_size) +
+    geom_vline(xintercept = cutoff_low, linetype = "dashed", color = "grey") +
+    geom_vline(xintercept = cutoff_high, linetype = "dashed", color = "grey") +
+    geom_hline(yintercept = 2^enrichment_cutoff, linetype = 5, color = "black") +
+    theme_classic() +
+    xlab("Enrich2 Score (Control)") +
+    ylab("Relative Enrichment") +
+    coord_cartesian(xlim = xlim, ylim = ylim) + 
+    scale_x_continuous(breaks = seq(xlim[1], xlim[2], by = 2), labels = seq(xlim[1], xlim[2], by = 2))+
+  scale_color_gradient2(limits = c(-1,1),low = "blue", mid = "grey", high = "red", midpoint = 0)+
+ theme(legend.position = "none")
+  
+# IC90 plot
+  plot90 <- ggplot() +
+        geom_point(data= df_90,aes(mean_score_control, 2^Mean_Enrichment_IC90, color = Enrichment_groupscores),size = point_size)+
+    geom_vline(xintercept = cutoff_low, linetype = "dashed", color = "grey") +
+    geom_vline(xintercept = cutoff_high, linetype = "dashed", color = "grey") +
+    geom_hline(yintercept = 2^enrichment_cutoff, linetype = 5, color = "black")+
+    theme_classic() +
+    xlab("Enrich2 Score (Control)") +
+    ylab("Relative Enrichment") +
+    coord_cartesian(xlim = xlim, ylim = ylim) + 
+    scale_x_continuous(breaks = seq(xlim[1], xlim[2], by = 2), labels = seq(xlim[1], xlim[2], by = 2))+
+  scale_color_gradient2(limits = c(-1,1),low = "blue", mid = "grey", high = "red", midpoint = 0)+
+    theme(legend.position = "none")+
+ theme(legend.position = "none")
+  
+# IC99 plot
+    plot99 <- ggplot() +
+    geom_point(data= df_99,aes(mean_score_control, 2^Mean_Enrichment_IC99, color = Enrichment_groupscores),size = point_size) +
+    geom_vline(xintercept = cutoff_low, linetype = "dashed", color = "grey") +
+    geom_vline(xintercept = cutoff_high, linetype = "dashed", color = "grey") +
+    geom_hline(yintercept = 2^enrichment_cutoff, linetype = 5, color = "black")+
+    theme_classic() +
+    xlab("Enrich2 Score (Control)") +
+    ylab("Relative Enrichment") +
+    coord_cartesian(xlim = xlim, ylim = ylim) + 
+    scale_x_continuous(breaks = seq(xlim[1], xlim[2], by = 2), labels = seq(xlim[1], xlim[2], by = 2))+
+  scale_color_gradient2(limits = c(-1,1),low = "blue", mid = "grey", high = "red", midpoint = 0)+
+ theme(legend.position = "none")
+
+# Plotting the legend
+    legend_plot <- ggplot() +
+    geom_point(data= df_99,aes(mean_score_control, 2^Mean_Enrichment_IC99, color = Enrichment_groupscores),size = point_size) +
+    geom_vline(xintercept = cutoff_low, linetype = "dashed", color = "grey") +
+    geom_vline(xintercept = cutoff_high, linetype = "dashed", color = "grey") +
+    geom_hline(yintercept = 2^enrichment_cutoff, linetype = 5, color = "black") +
+    theme_classic() +
+    xlab("Enrich2 Score (Control)") +
+    ylab("Relative Enrichment") +
+    coord_cartesian(xlim = xlim, ylim = ylim) + 
+    scale_x_continuous(breaks = seq(xlim[1], xlim[2], by = 2), labels = seq(xlim[1], xlim[2], by = 2))+
+  scale_color_gradient2(limits = c(-1,1),low = "blue", mid = "grey", high = "red", midpoint = 0)
+
+#Assembling plots using the cowplot package  
+Assembled_escape_plot <- plot_grid(plot50,plot90,plot99,nrow  = 1)
+
+#Saving data
+ggsave(plot = Assembled_escape_plot, filename = paste0("Escape_plot_", drug_name, ".png"), height = 2, width = 9)
+
+ggsave(plot = legend_plot, filename = paste0("Escape_plot_legend", drug_name, ".png"), height = 4, width = 4)
+
+#Return plot
+return(Assembled_escape_plot)
+  }
+
+#Usage of function:
+
+#Rupi
+plot_escape_metrics(df_rupi_full, drug_name = "rupi", enrichment_cutoff = enrichment_cutoff, 
+                   cutoff_low = fitness_sd_rupi$cutoff_low, cutoff_high = fitness_sd_rupi$cutoff_high,
+                    xlim = c(-8, 8), ylim = c(0, 25),Enrichment_groupscores=enrichment_fitness_scores_rupi)
+#Guan
+plot_escape_metrics(df_guan_full, drug_name = "guan", enrichment_cutoff = enrichment_cutoff, 
+                   cutoff_low = fitness_sd_guan$cutoff_low, cutoff_high = fitness_sd_guan$cutoff_high,
+                   xlim = c(-8, 8), ylim = c(0, 300),Enrichment_groupscores=enrichment_fitness_scores_guan)
+#Envi
+plot_escape_metrics(df_enviroxime_full, drug_name = "envi", enrichment_cutoff = enrichment_cutoff, 
+                   cutoff_low = fitness_sd_envi$cutoff_low, cutoff_high = fitness_sd_envi$cutoff_high,
+                   xlim = c(-8, 8), ylim = c(0, 25),Enrichment_groupscores=enrichment_fitness_scores_envi)
+#BrefA
+plot_escape_metrics(df_BrefA_full, drug_name = "BrefA", enrichment_cutoff = enrichment_cutoff, 
+                   cutoff_low = fitness_sd_BrefA$cutoff_low, cutoff_high = fitness_sd_BrefA$cutoff_high,
+                   xlim = c(-8, 8), ylim = c(0, 65),Enrichment_groupscores=enrichment_fitness_scores_BrefA)
+
+```

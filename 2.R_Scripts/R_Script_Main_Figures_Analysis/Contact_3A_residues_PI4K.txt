@@ -1,0 +1,12 @@
+residue id /A:8 name ILE index 7
+residue id /A:19 name ASP index 18
+residue id /A:27 name SER index 26
+residue id /A:28 name VAL index 27
+residue id /A:30 name SER index 29
+residue id /A:32 name GLU index 31
+residue id /B:8 name ILE index 7
+residue id /B:19 name ASP index 18
+residue id /B:27 name SER index 26
+residue id /B:30 name SER index 29
+residue id /B:32 name GLU index 31
+residue id /B:33 name VAL index 32
