@@ -843,6 +843,54 @@ write.csv(df_99_BrefA_max_3A_chimerax,file ="df_99_BrefA_max_3A_chimerax.csv")
 ```
 
 ```{r}
+#Focusing structural analysis on Enviroxime and BrefA IC99 mutants in 3AB
+
+#Calculating max enrichment in Enviroxime IC99 condition
+df_99_envi_max_3AB_chimerax <- df_enviroxime_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC99 = 2^max(Mean_Enrichment_IC99))
+ 
+#Selecting for residues in 3A and selecting only the position and max_enrichment
+df_99_envi_max_3AB_chimerax <- filter(df_99_envi_max_3AB_chimerax,position>1440 & position<1549)
+df_99_envi_max_3AB_chimerax <- select(df_99_envi_max_3AB_chimerax,position,Site_MFE_Max_Enrichment_IC99)
+
+#Reindexing position column to start with the first residue of 3AB
+df_99_envi_max_3AB_chimerax <- mutate(df_99_envi_max_3AB_chimerax,position=position-1440)
+
+#Adapting position to chimerax attribute file
+df_99_envi_max_3AB_chimerax$position <- paste("#1/A-B:", df_99_envi_max_3AB_chimerax$position, sep = "")
+
+df_99_envi_max_3AB_chimerax
+
+write.csv(df_99_envi_max_3AB_chimerax,file ="df_99_envi_max_3AB_chimerax.csv")
+
+#Calculating max enrichment in Enviroxime IC90 condition
+df_90_envi_max_3AB_chimerax <- df_enviroxime_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC90 = 2^max(Mean_Enrichment_IC90))
+ 
+#Selecting for residues in 3AB and selecting only the position and max_enrichment
+df_90_envi_max_3AB_chimerax <- filter(df_90_envi_max_3AB_chimerax,position>1440 & position<1549)
+df_90_envi_max_3AB_chimerax <- select(df_90_envi_max_3AB_chimerax,position,Site_MFE_Max_Enrichment_IC90)
+
+#Reindexing position column to start with the first residue of 3AB
+df_90_envi_max_3AB_chimerax <- mutate(df_90_envi_max_3AB_chimerax,position=position-1440)
+
+#Adapting position to chimerax attribute file
+df_90_envi_max_3AB_chimerax$position <- paste("#1/A-B:", df_90_envi_max_3AB_chimerax$position, sep = "")
+
+df_90_envi_max_3AB_chimerax
+
+write.csv(df_90_envi_max_3AB_chimerax,file ="df_90_envi_max_3AB_chimerax.csv")
+
+```
+
+
+
+
+
+
+```{r}
 #Asking what are the differences in enrichment scores if residues are in interaction between 3A and PI4K/ACBD3 at IC90 and IC99
 
 #Extracting residues of 3A that interact with PI4K
@@ -981,6 +1029,52 @@ df_99_rupi_max_3C_chimerax
 write.csv(df_99_rupi_max_3C_chimerax,file ="df_99_rupi_max_3C_chimerax.csv")
 
 ```
+
+```{r}
+#Focusing structural analysis on Rupintrivir IC90 and IC99 mutants in 3CD
+
+#Calculating max enrichment in Rupintrivir IC90 condition
+df_90_rupi_max_3CD_chimerax <- df_rupi_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC90 = 2^max(Mean_Enrichment_IC90))
+ 
+#Selecting for residues in 3CD and selecting only the position and max_enrichment
+df_90_rupi_max_3CD_chimerax <- filter(df_90_rupi_max_3CD_chimerax,position>1548)
+df_90_rupi_max_3CD_chimerax <- select(df_90_rupi_max_3CD_chimerax,position,Site_MFE_Max_Enrichment_IC90)
+
+#Reindexing position column to start with the first residue of 3CD
+df_90_rupi_max_3CD_chimerax <- mutate(df_90_rupi_max_3CD_chimerax,position=position-1548)
+
+#Adapting position to chimerax attribute file
+df_90_rupi_max_3CD_chimerax$position <- paste("#1/A:", df_90_rupi_max_3CD_chimerax$position, sep = "")
+
+df_90_rupi_max_3CD_chimerax
+
+write.csv(df_90_rupi_max_3CD_chimerax,file ="df_90_rupi_max_3CD_chimerax.csv")
+
+#Calculating max enrichment in Rupintrivir IC99 condition
+df_99_rupi_max_3CD_chimerax <- df_rupi_full %>% 
+  group_by(position) %>% 
+  summarize(Site_MFE_Max_Enrichment_IC99 = 2^max(Mean_Enrichment_IC99))
+ 
+#Selecting for residues in 3CD and selecting only the position and max_enrichment
+df_99_rupi_max_3CD_chimerax <- filter(df_99_rupi_max_3CD_chimerax,position>1548)
+df_99_rupi_max_3CD_chimerax <- select(df_99_rupi_max_3CD_chimerax,position,Site_MFE_Max_Enrichment_IC99)
+
+#Reindexing position column to start with the first residue of 3CD
+df_99_rupi_max_3CD_chimerax <- mutate(df_99_rupi_max_3CD_chimerax,position=position-1548)
+
+#Adapting position to chimerax attribute file
+df_99_rupi_max_3CD_chimerax$position <- paste("#1/A:", df_99_rupi_max_3CD_chimerax$position, sep = "")
+
+df_99_rupi_max_3CD_chimerax
+
+write.csv(df_99_rupi_max_3CD_chimerax,file ="df_99_rupi_max_3CD_chimerax.csv")
+
+```
+
+
+
 
 
 ```{r}
