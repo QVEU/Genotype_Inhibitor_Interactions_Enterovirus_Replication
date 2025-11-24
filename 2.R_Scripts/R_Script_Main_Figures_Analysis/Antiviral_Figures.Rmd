@@ -952,7 +952,7 @@ Mutants_3A_BrefA_resistance <- df_BrefA_full %>% filter(viralprotein=="3A") %>%
 mutate(viralproteinposition=position-1440) 
 
 #Filtering only the residues of interest
-Mutants_3A_BrefA_resistance <- filter(Mutants_3A_BrefA_resistance,viralproteinposition=="16"|viralproteinposition=="27"|viralproteinposition=="29")
+Mutants_3A_BrefA_resistance <- filter(Mutants_3A_BrefA_resistance,viralproteinposition=="16"|viralproteinposition=="27"|viralproteinposition=="29"|viralproteinposition=="30")
 
 #Selecting for only columns of interest
 Mutants_3A_BrefA_resistance <- select(Mutants_3A_BrefA_resistance,hgvs,Mean_Enrichment_IC99,mean_score_control,viralproteinposition) 
@@ -971,7 +971,7 @@ Mutants_3A_enviroxime_resistance <- df_enviroxime_full %>% filter(viralprotein==
 mutate(viralproteinposition=position-1440) 
 
 #Filtering only the residues of interest
-Mutants_3A_enviroxime_resistance <- filter(Mutants_3A_enviroxime_resistance,viralproteinposition=="8"|viralproteinposition=="19"|viralproteinposition=="48")
+Mutants_3A_enviroxime_resistance <- filter(Mutants_3A_enviroxime_resistance,viralproteinposition=="8"|viralproteinposition=="19"|viralproteinposition=="48"|viralproteinposition=="35")
 
 #Selecting for only columns of interest
 Mutants_3A_enviroxime_resistance <- select(Mutants_3A_enviroxime_resistance,hgvs,Mean_Enrichment_IC90,Mean_Enrichment_IC99,mean_score_control,viralproteinposition) 
