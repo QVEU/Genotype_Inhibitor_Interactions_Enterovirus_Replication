@@ -557,6 +557,97 @@ plot_enrichment(df_BrefA_full, drug_name = "BrefA", enrichment_cutoff = enrichme
 ```
 
 ```{r}
+heat_map_common_sites <- function(df) {
+df <- df %>%  filter(Mean_Enrichment_IC50 > enrichment_cutoff | Mean_Enrichment_IC90 > enrichment_cutoff | Mean_Enrichment_IC99 > enrichment_cutoff)
+
+df  <-  select(df, position,hgvs,Mean_Enrichment_IC50, Mean_Enrichment_IC90, Mean_Enrichment_IC99)
+
+df$hgvs <- factor(df$hgvs, levels = rev(df$hgvs[order(df$position)]))
+
+#Top 10 from each IC,  merge and remove duplicates
+df_50 <- df %>% arrange(desc(Mean_Enrichment_IC50)) %>% head(10) 
+df_90 <- df %>% arrange(desc(Mean_Enrichment_IC90)) %>% head(10) 
+df_99 <- df %>% arrange(desc(Mean_Enrichment_IC99)) %>% head(10) 
+
+
+#Binds the row of dataframe IC50/IC90/IC99 : then keep only distinct positions and hgvs
+df <- bind_rows(df_50, df_90, df_99) %>% distinct(hgvs, .keep_all = TRUE)
+
+df <- df %>%pivot_longer(cols = c(Mean_Enrichment_IC50, Mean_Enrichment_IC90, Mean_Enrichment_IC99),
+    names_to = "measurement",
+    values_to = "enrichment")
+
+heatmap_common <- ggplot(df, aes(x = measurement, y = hgvs, fill = enrichment)) + geom_tile() +coord_fixed()+
+  theme_minimal(base_size = 12) +theme(axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 6))+ scale_fill_gradient(low = "white",high = "#56B1F7")+
+  geom_text(data =filter(df, enrichment > enrichment_cutoff),label = "*",size = 3,  color = "black")
+return(heatmap_common)
+}
+
+heat_map_common_sites(df_guan_full)
+
+#Merge three df with top hits 10 at each ic concentration
+
+#df_rupi_full
+#df_guan_full
+#df_enviroxime_full
+#df_BrefA_full
+
+```
+
+
+  
+
+  # 4) Order hgvs by genomic position (so y-axis is nice)
+  df_top <- df_top %>%
+    arrange(position) %>%
+    mutate(hgvs = factor(hgvs, levels = unique(hgvs)))
+
+  # 5) Data frame for stars
+  stars <- df_top %>% filter(enrichment > enrichment_cutoff)
+
+  # ---- Version 1: single heatmap, x = concentration ----
+  p_main <- ggplot(df_top, aes(x = measurement, y = hgvs, fill = enrichment)) +
+    geom_tile() +
+    coord_fixed() +
+    theme_minimal(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      axis.text.y = element_text(size = 6)
+    ) +
+    scale_fill_gradient(low = "white", high = "#56B1F7") +
+    geom_text(
+      data = stars,
+      label = "*",
+      size = 3,
+      color = "black"
+    )
+
+  return(p_main)
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
 #This is a function to create a rolling mean of the enrichment scores for the different antivirals at different concentrations
 
 plot_rolling_mean_resistance <- function(df, drug_name, filename_prefix = "Rollingmean_resistance_", 
