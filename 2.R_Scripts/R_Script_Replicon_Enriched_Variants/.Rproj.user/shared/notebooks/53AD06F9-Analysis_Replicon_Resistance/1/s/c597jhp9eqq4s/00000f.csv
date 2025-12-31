@@ -1,0 +1,47 @@
+"0","#Running replicon function for BrefA 3A experiment:"
+"0",""
+"0","sample_mapping_brefA_3A_wt <- c(""Conc_0_WT_repA"" = ""B2"",""Conc_0_WT_repB"" = ""B3"",""Conc_0_WT_repC"" = ""B4"","
+"0","                                ""Conc_90_WT_repA"" = ""B5"",""Conc_90_WT_repB"" = ""B6"",""Conc_90_WT_repC"" = ""B7"","
+"0","                                ""Conc_99_WT_repA"" = ""B8"",""Conc_99_WT_repB"" = ""B9"",""Conc_99_WT_repC"" = ""B10"")"
+"0","  "
+"0","brefA_3A_wt <- Replicon_Analysis_Resistance(""12_11_2025_WT_BrefA_Resistance_3A_Complete_N_2.csv"",sample_mapping_brefA_3A_wt,0,600,c(0,130000))"
+"2","[1mRows: [22m[34m145[39m [1mColumns: [22m[34m98[39m"
+"2","[36m──[39m [1mColumn specification[22m [36m────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[1mDelimiter:[22m "",""
+[32mdbl[39m  (97): T° Lum, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12,...
+[34mtime[39m  (1): Time"
+"2","
+[36mℹ[39m Use `spec()` to retrieve the full column specification for this data.
+[36mℹ[39m Specify the column types or set `show_col_types = FALSE` to quiet this message."
+"0","  "
+"0","sample_mapping_brefA_3A_S605T <- c(""Conc_0_S605T_repA"" = ""C2"",""Conc_0_S605T_repB"" = ""C3"", ""Conc_0_S605T_repC""=""C4"","
+"0","                                   ""Conc_90_S605T_repA"" = ""C5"",""Conc_90_S605T_repB"" = ""C6"",""Conc_90_S605T_repC""=""C7"","
+"0","                                   ""Conc_99_S605T_repA"" = ""C8"",""Conc_99_S605T_repB"" = ""C9"",""Conc_99_S605T_repC""=""C10"")"
+"0",""
+"0","brefA_3A_S605T <- Replicon_Analysis_Resistance(""12_11_2025_WT_BrefA_Resistance_3A_Complete_N_2.csv"",sample_mapping_brefA_3A_S605T,0,600,c(0,130000))"
+"2","[1mRows: [22m[34m145[39m [1mColumns: [22m[34m98[39m"
+"2","[36m──[39m [1mColumn specification[22m [36m────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[1mDelimiter:[22m "",""
+[32mdbl[39m  (97): T° Lum, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12,...
+[34mtime[39m  (1): Time"
+"2","
+[36mℹ[39m Use `spec()` to retrieve the full column specification for this data.
+[36mℹ[39m Specify the column types or set `show_col_types = FALSE` to quiet this message."
+"0","sample_mapping_brefA_3A_D607Q <- c(""Conc_0_D607Q_repA"" = ""D2"",""Conc_0_D607Q_repB"" = ""D3"",""Conc_0_D607Q_repC"" = ""D4"","
+"0","                                     ""Conc_90_D607Q_repA"" = ""D5"",""Conc_90_D607Q_repB"" = ""D6"",""Conc_90_D607Q_repC"" = ""D7"","
+"0","                                     ""Conc_99_D607Q_repA"" = ""D8"",""Conc_99_D607Q_repB"" = ""D9"",""Conc_99_D607Q_repC"" = ""D10"")"
+"0",""
+"0","brefA_3A_D607Q <- Replicon_Analysis_Resistance(""12_11_2025_WT_BrefA_Resistance_3A_Complete_N_2.csv"",sample_mapping_brefA_3A_D607Q,0,600,c(0,130000))"
+"2","[1mRows: [22m[34m145[39m [1mColumns: [22m[34m98[39m"
+"2","[36m──[39m [1mColumn specification[22m [36m────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[1mDelimiter:[22m "",""
+[32mdbl[39m  (97): T° Lum, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12,...
+[34mtime[39m  (1): Time"
+"2","
+[36mℹ[39m Use `spec()` to retrieve the full column specification for this data.
+[36mℹ[39m Specify the column types or set `show_col_types = FALSE` to quiet this message."
+"0","combined_plot_brefA_3A <- plot_grid(brefA_3A_wt$plot,brefA_3A_S605T$plot,brefA_3A_D607Q$plot,ncol = 3)"
+"2","Warning: [38;5;232mRemoved 252 rows containing missing values or values outside the scale range (`geom_point()`).[39m"
+"2","Warning: [38;5;232mRemoved 252 rows containing missing values or values outside the scale range (`geom_point()`).[39m"
+"2","Warning: [38;5;232mRemoved 252 rows containing missing values or values outside the scale range (`geom_point()`).[39m"
+"0","ggsave(""combined_plot_brefA_3A.pdf"",combined_plot_brefA_3A,width=8,height=2)"

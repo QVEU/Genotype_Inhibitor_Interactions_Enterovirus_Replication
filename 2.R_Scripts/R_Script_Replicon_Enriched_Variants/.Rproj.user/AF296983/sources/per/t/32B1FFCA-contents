@@ -1,0 +1,267 @@
+---
+title: "Replicon_Resistance_Analysis"
+author: "William_Bakhache"
+date: "2025-12-11"
+output: html_document
+---
+```{r}
+library(tidyverse)
+library(scales)
+library(cowplot)
+library(growthcurver)
+```
+
+```{r}
+Replicon_Analysis_Resistance <- function(input_dataframe,sample_mapping,xmin,xmax,ylims)
+
+{
+#Reading in .csv file from Neo2 replicon dataset
+Replicon_dataframe <- read_csv(input_dataframe)
+#Changing Time to character
+Replicon_dataframe$Time <- as.character(Replicon_dataframe$Time)
+#Changing time format into minutes
+Replicon_dataframe$Time <- as.numeric(as.difftime(Replicon_dataframe$Time, format = "%H:%M:%S", units = "mins"))
+#Changing column names to the corresponding sample names using rename with splice operator
+Replicon_dataframe <- rename(Replicon_dataframe,!!!sample_mapping)
+#Pivot longer the dataset
+Replicon_dataframe <- pivot_longer(Replicon_dataframe, cols = -Time, names_to = "SampleName",values_to = "RLU")
+#Subset dataframe so that it only has samples that start with Conc
+Replicon_dataframe <- subset(Replicon_dataframe, grepl("^Conc", SampleName))
+#Extract the concentration from the string
+Replicon_dataframe <- Replicon_dataframe %>% mutate(concentration = as.numeric(gsub("Conc_(\\d+).*", "\\1", SampleName)))
+#Group by time and concentration and calculate the mean and sd at each timepoint
+Replicon_dataframe <- Replicon_dataframe %>% group_by(Time, concentration) %>%
+mutate(mean_RLU = mean(RLU),sd_RLU = sd(RLU)) %>% distinct(Time, concentration, .keep_all = TRUE)
+#Select columns of interest
+Replicon_dataframe <- select(Replicon_dataframe,Time,concentration,mean_RLU,sd_RLU)
+#Transform Concentration to factor
+Replicon_dataframe$concentration <- as.factor(Replicon_dataframe$concentration)
+# Create the main plot with the replicon data
+Plot <- ggplot(Replicon_dataframe, aes(x = Time, y = mean_RLU,color=concentration)) +
+  geom_point(size=0.1) +labs(x = "Time (min)", y = "RLU") +theme_bw() +theme(legend.position = "none")+
+  scale_color_manual(values = c("0"  = "black","90" = "orange","99" = "red" ))+xlim(xmin,xmax)+
+  geom_errorbar(aes(ymin = mean_RLU - sd_RLU,ymax = mean_RLU + sd_RLU))+
+  scale_y_continuous(labels = label_scientific(),limits=ylims)
+return(list(replication_concentrationdataframe=Replicon_dataframe,plot=Plot))
+}
+```
+
+```{r}
+#Running replicon function for GuanHCL experiment:
+
+sample_mapping_guan_2C_wt <- c( "Conc_0_WT_repA" = "B2","Conc_0_WT_repB" = "B3", "Conc_0_WT_repC"= "B4", 
+                                "Conc_90_WT_repA" = "B5","Conc_90_WT_repB" = "B6","Conc_90_WT_repC"= "B7",
+                                "Conc_99_WT_repA" = "B8","Conc_99_WT_repB" = "B9","Conc_99_WT_repC" = "B10")
+  
+guan_2C_wt <- Replicon_Analysis_Resistance("12_04_2025_WT_Guan_Resistance_Complete_N_2.csv",sample_mapping_guan_2C_wt,0,600,c(0,110000))
+  
+sample_mapping_guan_2C_C428A <- c("Conc_0_C428A_repA" = "C2","Conc_0_C428A_repB" = "C3","Conc_0_C428A_repC" = "C4",
+                                  "Conc_90_C428A_repA" = "C5","Conc_90_C428A_repB" = "C6","Conc_90_C428A_repC" = "C7",
+                                  "Conc_99_C428A_repA" = "C8","Conc_99_C428A_repB" = "C9","Conc_99_C428A_repC" = "C10")
+
+guan_2C_C428A <- Replicon_Analysis_Resistance("12_04_2025_WT_Guan_Resistance_Complete_N_2.csv",sample_mapping_guan_2C_C428A,0,600,c(0,110000))
+
+sample_mapping_guan_2C_K434A <- c("Conc_0_K434A_repA" = "D2","Conc_0_K434A_repB" = "D3","Conc_0_K434A_repC" = "D4",
+                                  "Conc_90_K434A_repA" = "D5","Conc_90_K434A_repB" = "D6","Conc_90_K434A_repC" = "D7",
+                                  "Conc_99_K434A_repA"= "D8","Conc_99_K434A_repB" = "D9","Conc_99_K434A_repC" = "D10")
+
+guan_2C_K434A <- Replicon_Analysis_Resistance("12_04_2025_WT_Guan_Resistance_Complete_N_2.csv",sample_mapping_guan_2C_K434A,0,600,c(0,110000))
+
+combined_plot_guan_2C <- plot_grid(guan_2C_wt$plot,guan_2C_C428A$plot,guan_2C_K434A$plot,ncol = 3)
+
+ggsave("combined_plot_guan_2C.pdf",combined_plot_guan_2C,width=8,height=2)
+```
+
+```{r}
+#Running replicon function for BrefA 3A experiment:
+
+sample_mapping_brefA_3A_wt <- c("Conc_0_WT_repA" = "B2","Conc_0_WT_repB" = "B3","Conc_0_WT_repC" = "B4",
+                                "Conc_90_WT_repA" = "B5","Conc_90_WT_repB" = "B6","Conc_90_WT_repC" = "B7",
+                                "Conc_99_WT_repA" = "B8","Conc_99_WT_repB" = "B9","Conc_99_WT_repC" = "B10")
+  
+brefA_3A_wt <- Replicon_Analysis_Resistance("12_11_2025_WT_BrefA_Resistance_3A_Complete_N_2.csv",sample_mapping_brefA_3A_wt,0,600,c(0,130000))
+  
+sample_mapping_brefA_3A_S605T <- c("Conc_0_S605T_repA" = "C2","Conc_0_S605T_repB" = "C3", "Conc_0_S605T_repC"="C4",
+                                   "Conc_90_S605T_repA" = "C5","Conc_90_S605T_repB" = "C6","Conc_90_S605T_repC"="C7",
+                                   "Conc_99_S605T_repA" = "C8","Conc_99_S605T_repB" = "C9","Conc_99_S605T_repC"="C10")
+
+brefA_3A_S605T <- Replicon_Analysis_Resistance("12_11_2025_WT_BrefA_Resistance_3A_Complete_N_2.csv",sample_mapping_brefA_3A_S605T,0,600,c(0,130000))
+
+sample_mapping_brefA_3A_D607Q <- c("Conc_0_D607Q_repA" = "D2","Conc_0_D607Q_repB" = "D3","Conc_0_D607Q_repC" = "D4",
+                                     "Conc_90_D607Q_repA" = "D5","Conc_90_D607Q_repB" = "D6","Conc_90_D607Q_repC" = "D7",
+                                     "Conc_99_D607Q_repA" = "D8","Conc_99_D607Q_repB" = "D9","Conc_99_D607Q_repC" = "D10")
+
+brefA_3A_D607Q <- Replicon_Analysis_Resistance("12_11_2025_WT_BrefA_Resistance_3A_Complete_N_2.csv",sample_mapping_brefA_3A_D607Q,0,600,c(0,130000))
+
+combined_plot_brefA_3A <- plot_grid(brefA_3A_wt$plot,brefA_3A_S605T$plot,brefA_3A_D607Q$plot,ncol = 3)
+
+ggsave("combined_plot_brefA_3A.pdf",combined_plot_brefA_3A,width=8,height=2)
+```
+
+```{r}
+#Running replicon function for BrefA 2C experiment:
+
+sample_mapping_Brefa_2C_wt <- c( "Conc_0_WT_repA" = "B2","Conc_0_WT_repB" = "B3", "Conc_0_WT_repC"= "B4", 
+                                "Conc_90_WT_repA" = "B5","Conc_90_WT_repB" = "B6","Conc_90_WT_repC"= "B7",
+                                "Conc_99_WT_repA" = "B8","Conc_99_WT_repB" = "B9","Conc_99_WT_repC" = "B10")
+  
+Brefa_2C_wt <- Replicon_Analysis_Resistance("12_29_2025_WT_BrefA_2C_Resistance_Mutants_N1.csv",sample_mapping_Brefa_2C_wt,0,600,c(0,130000))
+  
+sample_mapping_Brefa_2C_K290T <- c("Conc_0_K290T_repA" = "C2","Conc_0_K290T_repB" = "C3","Conc_0_K290T_repC" = "C4",
+                                  "Conc_90_K290T_repA" = "C5","Conc_90_K290T_repB" = "C6","Conc_90_K290T_repC" = "C7",
+                                  "Conc_99_K290T_repA" = "C8","Conc_99_K290T_repB" = "C9","Conc_99_K290T_repC" = "C10")
+
+Brefa_2C_K290T <- Replicon_Analysis_Resistance("12_29_2025_WT_BrefA_2C_Resistance_Mutants_N1.csv",sample_mapping_Brefa_2C_K290T,0,600,c(0,130000))
+
+sample_mapping_Brefa_2C_D321Q <- c("Conc_0_D321Q_repA" = "D2","Conc_0_D321Q_repB" = "D3","Conc_0_D321Q_repC" = "D4",
+                                  "Conc_90_D321Q_repA" = "D5","Conc_90_D321Q_repB" = "D6","Conc_90_D321Q_repC" = "D7",
+                                  "Conc_99_D321Q_repA"= "D8","Conc_99_D321Q_repB" = "D9","Conc_99_D321Q_repC" = "D10")
+
+Brefa_2C_D321Q <- Replicon_Analysis_Resistance("12_29_2025_WT_BrefA_2C_Resistance_Mutants_N1.csv",sample_mapping_Brefa_2C_D321Q,0,600,c(0,130000))
+
+combined_plot_Brefa_2C <- plot_grid(Brefa_2C_wt$plot,Brefa_2C_D321Q$plot,Brefa_2C_K290T$plot,ncol = 3)
+
+ggsave("combined_plot_Brefa_2C.pdf",combined_plot_Brefa_2C,width=8,height=2)
+```
+
+```{r}
+#Running replicon function for Enviroxime 3A experiment:
+
+sample_mapping_Enviroxime_3A_wt <- c( "Conc_0_WT_repA" = "B2","Conc_0_WT_repB" = "B3", "Conc_0_WT_repC"= "B4", 
+                                "Conc_90_WT_repA" = "B5","Conc_90_WT_repB" = "B6","Conc_90_WT_repC"= "B7",
+                                "Conc_99_WT_repA" = "B8","Conc_99_WT_repB" = "B9","Conc_99_WT_repC" = "B10")
+  
+Enviroxime_3A_wt <- Replicon_Analysis_Resistance("12_30_2025_WT_Enviroxime_3A_Resistance_Mutants_N1.csv",sample_mapping_Enviroxime_3A_wt,0,600,c(0,110000))
+  
+sample_mapping_Enviroxime_3A_I586P <- c("Conc_0_I586P_repA" = "C2","Conc_0_I586P_repB" = "C3","Conc_0_I586P_repC" = "C4",
+                                  "Conc_90_I586P_repA" = "C5","Conc_90_I586P_repB" = "C6","Conc_90_I586P_repC" = "C7",
+                                  "Conc_99_I586P_repA" = "C8","Conc_99_I586P_repB" = "C9","Conc_99_I586P_repC" = "C10")
+
+Enviroxime_3A_I586P <- Replicon_Analysis_Resistance("12_30_2025_WT_Enviroxime_3A_Resistance_Mutants_N1.csv",sample_mapping_Enviroxime_3A_I586P,0,600,c(0,110000))
+
+sample_mapping_Enviroxime_3A_Q613V <- c("Conc_0_Q613V_repA" = "D2","Conc_0_Q613V_repB" = "D3","Conc_0_Q613V_repC" = "D4",
+                                  "Conc_90_Q613V_repA" = "D5","Conc_90_Q613V_repB" = "D6","Conc_90_Q613V_repC" = "D7",
+                                  "Conc_99_Q613V_repA"= "D8","Conc_99_Q613V_repB" = "D9","Conc_99_Q613V_repC" = "D10")
+
+Enviroxime_3A_Q613V <- Replicon_Analysis_Resistance("12_30_2025_WT_Enviroxime_3A_Resistance_Mutants_N1.csv",sample_mapping_Enviroxime_3A_Q613V,0,600,c(0,110000))
+
+combined_plot_Enviroxime_3A <- plot_grid(Enviroxime_3A_wt$plot,Enviroxime_3A_I586P$plot,Enviroxime_3A_Q613V$plot,ncol = 3)
+
+ggsave("combined_plot_Enviroxime_3A.pdf",combined_plot_Enviroxime_3A,width=8,height=2)
+```
+
+```{r}
+Growthcurver_Function <- function(input_dataframe,well_map,desiredorder)
+{
+df <- read_csv(input_dataframe)
+#Changing Time to character
+df$Time <- as.character(df$Time)
+#Changing time format into minutes
+df$Time <- as.numeric(as.difftime(df$Time, format = "%H:%M:%S", units = "hours"))
+#Changing column name to something compatible with growthcurver
+df <- rename(df,time = Time)
+#Removing the temprature column
+df <- select(df,-`T° Lum`)
+#Filter time till 10hrs
+df <- filter(df,time<10.1)
+#Use Growthcurver to summarize the growth curve data for the entire plate using the default background correction method ("min").
+df_growthcurver <- SummarizeGrowthByPlate(df)
+#Keep only names from well_map and recode the names according to sample sheet
+df_growthcurver <- df_growthcurver %>% filter(sample %in% names(well_map)) %>% mutate(sample = recode(sample,!!!well_map))
+
+#Use column 1 to separate samplae name into a concentration column/mutant/replicate. Then order by factor
+df_growthcurver <- df_growthcurver %>% rename(sample = 1) %>%separate(sample,into = c("Conc_label", "conc", "mutant", "rep"),sep = "_",remove = FALSE) %>% mutate(conc = factor(conc,levels = c("0", "90", "99"),  ordered = TRUE))
+#Select only columns with metrics of interest
+df_growthcurver <- select(df_growthcurver,mutant, conc,r, k, t_mid, auc_e)
+
+#r: intrinsic growth rate of the population: growth rate that would occur if there were no restrictions on population size.
+#K: The maximum possible population size in a particular environment, or the carrying capacity
+#t_mid:is the time at which the population density reaches 1/2 K
+#auc_e is the empirical area under the curve which is obtained by summing up the area under the experimental curve from the measurements in the input data
+df_growthcurver <- df_growthcurver %>% pivot_longer(cols = c(r, k, t_mid, auc_e),names_to = "metric",values_to = "value") %>%
+group_by(mutant, conc, metric) %>% summarise(mean = mean(value, na.rm = TRUE),sd   = sd(value, na.rm = TRUE),.groups = "drop")
+
+#Add metrics as a factor in order to plot according to desired order
+df_growthcurver$metric <- factor(df_growthcurver$metric,levels = c("r","t_mid","k","auc_e"))
+
+df_growthcurver$mutant <- factor(df_growthcurver$mutant,levels = desiredorder)
+#Make a ggplot using the metrics from growthcurver
+Plot_growthcurver <- ggplot(df_growthcurver,aes(x = conc, y = mean, color = mutant, group = mutant)) +geom_line(linewidth = 1) +
+geom_point(size = 2) +geom_errorbar(aes(ymin = mean - sd, ymax = mean + sd),width = 0.1) +facet_wrap(~ metric, scales = "free_y",ncol = 4) +labs(x = "Condition", y = "Value", color = "Mutant") +theme_classic()+scale_color_brewer(palette = "Set2")
+
+return(Plot_growthcurver)
+}
+```
+
+```{r}
+#Running growthcurver function for GuanHCL experiment:
+
+complete_well_map_guan_2C <- c("B2" = "Conc_0_WT_repA", "B3" = "Conc_0_WT_repB", "B4" = "Conc_0_WT_repC",
+                   "B5" = "Conc_90_WT_repA","B6" = "Conc_90_WT_repB", "B7" = "Conc_90_WT_repC",
+                   "B8" = "Conc_99_WT_repA", "B9" = "Conc_99_WT_repB", "B10" = "Conc_99_WT_repC",
+                   "C2" = "Conc_0_C428A_repA", "C3" = "Conc_0_C428A_repB", "C4" = "Conc_0_C428A_repC",
+                   "C5" = "Conc_90_C428A_repA", "C6" = "Conc_90_C428A_repB", "C7" = "Conc_90_C428A_repC",
+                   "C8" = "Conc_99_C428A_repA", "C9" = "Conc_99_C428A_repB", "C10" = "Conc_99_C428A_repC",
+                   "D2" = "Conc_0_K434A_repA", "D3" = "Conc_0_K434A_repB", "D4" = "Conc_0_K434A_repC",
+                   "D5" = "Conc_90_K434A_repA", "D6" = "Conc_90_K434A_repB", "D7" = "Conc_90_K434A_repC",
+                   "D8" = "Conc_99_K434A_repA", "D9" = "Conc_99_K434A_repB", "D10" = "Conc_99_K434A_repC")
+
+desiredorder_mutant_guan_2C <- c("WT","C428A","K434A")
+
+guan_2C_enrichment_growthcurver <-  Growthcurver_Function("12_04_2025_WT_Guan_Resistance_Complete_N_2.csv",complete_well_map_guan_2C,desiredorder_mutant_guan_2C)
+
+ggsave("guan_2C_enrichment_growthcurver.pdf",guan_2C_enrichment_growthcurver,width=8,height=2)
+```
+
+```{r}
+#Running growthcurver function for BrefA 3A experiment:
+
+complete_well_map_brefA_3A <- c( "B2" = "Conc_0_WT_repA", "B3" = "Conc_0_WT_repB", "B4" = "Conc_0_WT_repC","B5" = "Conc_90_WT_repA", "B6" = "Conc_90_WT_repB", "B7" = "Conc_90_WT_repC","B8" = "Conc_99_WT_repA", "B9" = "Conc_99_WT_repB", "B10" = "Conc_99_WT_repC","C2" = "Conc_0_S605T_repA", "C3" = "Conc_0_S605T_repB", "C4" = "Conc_0_S605T_repC","C5" = "Conc_90_S605T_repA", "C6" = "Conc_90_S605T_repB", "C7" = "Conc_90_S605T_repC","C8" = "Conc_99_S605T_repA", "C9" = "Conc_99_S605T_repB", "C10" = "Conc_99_S605T_repC","D2" = "Conc_0_D607Q_repA", "D3" = "Conc_0_D607Q_repB", "D4" = "Conc_0_D607Q_repC","D5" = "Conc_90_D607Q_repA", "D6" = "Conc_90_D607Q_repB", "D7" = "Conc_90_D607Q_repC","D8" = "Conc_99_D607Q_repA", "D9" = "Conc_99_D607Q_repB", "D10" = "Conc_99_D607Q_repC")
+
+desiredorder_mutant_brefA_3A <- c("WT","S605T","D607Q")
+
+brefA_3A_enrichment_growthcurver <- Growthcurver_Function("12_11_2025_WT_BrefA_Resistance_3A_Complete_N_2.csv",complete_well_map_brefA_3A,desiredorder_mutant_brefA_3A)
+
+ggsave("brefA_3A_enrichment_growthcurver.pdf",brefA_3A_enrichment_growthcurver,width=8,height=2)
+```
+
+```{r}
+#Running growthcurver function for BrefA 2C experiment:
+
+complete_well_map_brefA_2C <- c("B2" = "Conc_0_WT_repA", "B3" = "Conc_0_WT_repB", "B4" = "Conc_0_WT_repC",
+                   "B5" = "Conc_90_WT_repA","B6" = "Conc_90_WT_repB", "B7" = "Conc_90_WT_repC",
+                   "B8" = "Conc_99_WT_repA", "B9" = "Conc_99_WT_repB", "B10" = "Conc_99_WT_repC",
+                   "C2" = "Conc_0_K290T_repA", "C3" = "Conc_0_K290T_repB", "C4" = "Conc_0_K290T_repC",
+                   "C5" = "Conc_90_K290T_repA", "C6" = "Conc_90_K290T_repB", "C7" = "Conc_90_K290T_repC",
+                   "C8" = "Conc_99_K290T_repA", "C9" = "Conc_99_K290T_repB", "C10" = "Conc_99_K290T_repC",
+                   "D2" = "Conc_0_D321Q_repA", "D3" = "Conc_0_D321Q_repB", "D4" = "Conc_0_D321Q_repC",
+                   "D5" = "Conc_90_D321Q_repA", "D6" = "Conc_90_D321Q_repB", "D7" = "Conc_90_D321Q_repC",
+                   "D8" = "Conc_99_D321Q_repA", "D9" = "Conc_99_D321Q_repB", "D10" = "Conc_99_D321Q_repC")
+
+desiredorder_mutant_brefA_2C <- c("WT","D321Q","K290T")
+
+BrefA_2C_enrichment_growthcurver <-  Growthcurver_Function("12_29_2025_WT_BrefA_2C_Resistance_Mutants_N1.csv",complete_well_map_brefA_2C,desiredorder_mutant_brefA_2C)
+
+ggsave("BrefA_2C_enrichment_growthcurver.pdf",BrefA_2C_enrichment_growthcurver,width=8,height=2)
+```
+
+```{r}
+#Running growthcurver function for Enviroxime 3A experiment:
+
+complete_well_map_Enviroxime_3A <- c("B2" = "Conc_0_WT_repA", "B3" = "Conc_0_WT_repB", "B4" = "Conc_0_WT_repC",
+                   "B5" = "Conc_90_WT_repA","B6" = "Conc_90_WT_repB", "B7" = "Conc_90_WT_repC",
+                   "B8" = "Conc_99_WT_repA", "B9" = "Conc_99_WT_repB", "B10" = "Conc_99_WT_repC",
+                   "C2" = "Conc_0_I586P_repA", "C3" = "Conc_0_I586P_repB", "C4" = "Conc_0_I586P_repC",
+                   "C5" = "Conc_90_I586P_repA", "C6" = "Conc_90_I586P_repB", "C7" = "Conc_90_I586P_repC",
+                   "C8" = "Conc_99_I586P_repA", "C9" = "Conc_99_I586P_repB", "C10" = "Conc_99_I586P_repC",
+                   "D2" = "Conc_0_Q613V_repA", "D3" = "Conc_0_Q613V_repB", "D4" = "Conc_0_Q613V_repC",
+                   "D5" = "Conc_90_Q613V_repA", "D6" = "Conc_90_Q613V_repB", "D7" = "Conc_90_Q613V_repC",
+                   "D8" = "Conc_99_Q613V_repA", "D9" = "Conc_99_Q613V_repB", "D10" = "Conc_99_Q613V_repC")
+
+desiredorder_mutant_Enviroxime <- c("WT","I586P","Q613V")
+
+Enviroxime_3A_enrichment_growthcurver <-  Growthcurver_Function("12_30_2025_WT_Enviroxime_3A_Resistance_Mutants_N1.csv",complete_well_map_Enviroxime_3A,desiredorder_mutant_Enviroxime)
+
+ggsave("Enviroxime_3A_enrichment_growthcurver.pdf",Enviroxime_3A_enrichment_growthcurver,width=8,height=2)
+```
+

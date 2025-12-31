@@ -1,0 +1,16 @@
+"0","#Running growthcurver function for BrefA 3A experiment:"
+"0",""
+"0","complete_well_map_brefA_3A <- c( ""B2"" = ""Conc_0_WT_repA"", ""B3"" = ""Conc_0_WT_repB"", ""B4"" = ""Conc_0_WT_repC"",""B5"" = ""Conc_90_WT_repA"", ""B6"" = ""Conc_90_WT_repB"", ""B7"" = ""Conc_90_WT_repC"",""B8"" = ""Conc_99_WT_repA"", ""B9"" = ""Conc_99_WT_repB"", ""B10"" = ""Conc_99_WT_repC"",""C2"" = ""Conc_0_S605T_repA"", ""C3"" = ""Conc_0_S605T_repB"", ""C4"" = ""Conc_0_S605T_repC"",""C5"" = ""Conc_90_S605T_repA"", ""C6"" = ""Conc_90_S605T_repB"", ""C7"" = ""Conc_90_S605T_repC"",""C8"" = ""Conc_99_S605T_repA"", ""C9"" = ""Conc_99_S605T_repB"", ""C10"" = ""Conc_99_S605T_repC"",""D2"" = ""Conc_0_D607Q_repA"", ""D3"" = ""Conc_0_D607Q_repB"", ""D4"" = ""Conc_0_D607Q_repC"",""D5"" = ""Conc_90_D607Q_repA"", ""D6"" = ""Conc_90_D607Q_repB"", ""D7"" = ""Conc_90_D607Q_repC"",""D8"" = ""Conc_99_D607Q_repA"", ""D9"" = ""Conc_99_D607Q_repB"", ""D10"" = ""Conc_99_D607Q_repC"")"
+"0",""
+"0","desiredorder_mutant_brefA_3A <- c(""WT"",""S605T"",""D607Q"")"
+"0",""
+"0","brefA_3A_enrichment_growthcurver <- Growthcurver_Function(""12_11_2025_WT_BrefA_Resistance_3A_Complete_N_2.csv"",complete_well_map_brefA_3A,desiredorder_mutant_brefA_3A)"
+"2","[1mRows: [22m[34m145[39m [1mColumns: [22m[34m98[39m"
+"2","[36m──[39m [1mColumn specification[22m [36m────────────────────────────────────────────────────────────────────────────────────────────────────[39m
+[1mDelimiter:[22m "",""
+[32mdbl[39m  (97): T° Lum, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12,...
+[34mtime[39m  (1): Time"
+"2","
+[36mℹ[39m Use `spec()` to retrieve the full column specification for this data.
+[36mℹ[39m Specify the column types or set `show_col_types = FALSE` to quiet this message."
+"0","ggsave(""brefA_3A_enrichment_growthcurver.pdf"",brefA_3A_enrichment_growthcurver,width=8,height=2)"
