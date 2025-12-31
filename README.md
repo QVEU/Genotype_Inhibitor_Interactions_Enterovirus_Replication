@@ -7,33 +7,30 @@ This repository contains all files, scripts, and structural predictions used in 
 ```
 .
 ├── 1.Figures
-│   ├── Figure1.png
-│   ├── Figure2.png
-│   ├── Figure3.png
-│   ├── Figure4.png
 │   ├── Figure_1.ai
 │   ├── Figure_2.ai
 │   ├── Figure_3.ai
 │   ├── Figure_4.ai
-│   ├── Graphical_Abstract.ai
-│   ├── Graphical_Abstract.png
-│   ├── Supp_figure_1.png
-│   ├── Supp_figure_2.png
-│   ├── Supp_figure_3.png
-│   ├── Supp_figure_4.png
-│   ├── Supplementary_figure_1.ai
-│   ├── Supplementary_figure_2.ai
-│   ├── Supplementary_figure_3.ai
-│   └── Supplementary_figure_4.ai
+│   ├── Figure_5.ai
+│   ├── Supplementary Figure_1.ai
+│   ├── Supplementary Figure_2.ai
+│   ├── Supplementary Figure_3.ai
+│   ├── Supplementary Figure_4.ai
+│   ├── Supplementary Figure_5.ai
+│   ├── Supplementary Figure_6.ai
+│   ├── Supplementary Figure_7.ai
+│   └── Supplementary Figure_8.ai
 ├── 2.R_Scripts
 │   ├── R_Script_Inhibitory_concentration_Analysis
 │   ├── R_Script_Main_Figures_Analysis
+│   └── R_Script_Replicon_Enriched_Variants
 ├── 3.Structures
 │   ├── 1.2A_3C_Enrichment_Mapping_Rupi
 │   ├── 2.2C_Enrichment_Mapping_BrefA_Guan
 │   ├── 3.3A_Enrichment_Mapping_BrefA_Envi
 │   └── README.md
 └── README.md
+
 ```
 ---
 
