@@ -126,6 +126,63 @@ df_control_full_wt
 
 
 ```{r}
+#Preparing dataframe for input condition
+#Reading in tsv file from Enrich2
+df_input_condition <- read_tsv("replication_P0_hgvs.tsv", col_names = TRUE)
+
+#Extracting information on position/wildtype and mutant amino acid using grep
+df_input_condition$Aminoacid <- gsub(".*\\d(\\D).*", "\\1", df_input_condition$hgvs)
+df_input_condition$position <- as.numeric(gsub("p\\.\\(\\D*(\\d+).*", "\\1", df_input_condition$hgvs))
+df_input_condition$WTAminoacid <- gsub("p\\.\\((\\D)\\d+.*", "\\1", df_input_condition$hgvs)
+
+#Saying if it mutant is == to wt then put an NA
+df_input_condition$is_wt <- df_input_condition$WTAminoacid == df_input_condition$Aminoacid
+df_input_condition$count <- ifelse(df_input_condition$is_wt, NA, df_input_condition$count)
+
+#Adjusting position to the start codon P1 = 862 amino acids and arranging by position
+df_input_condition <- mutate(df_input_condition,position=position+862)
+df_input_condition <- df_input_condition %>% arrange(position)
+
+#Adding column with viral protein information for each position
+df_input_condition <- df_input_condition %>% mutate(viralprotein = sapply(position, function(pos) {
+matching_row <- which(pos >= Viral_protein_Mapping$start & pos <= Viral_protein_Mapping$end)
+if (length(matching_row) > 0) {return(Viral_protein_Mapping$viralprotein[matching_row])} else {return("No Protein")}})
+)
+
+#Use amino acid as factors
+df_input_condition$Aminoacid=factor(df_input_condition$Aminoacid,levels = c("P","G","Y","W","F","V","L","I","A","T","S","Q","N","M","C","E","D","R","K","H"))
+
+#Modification to the df_input_condition to make it compatible with the heatmap code
+
+#Convert position to a factor with breaks
+breaks_inputheatmap_input <- seq(863, 2193, by = 221.83)
+
+#Create a function to assign labels based on position
+get_label_input_condition <- function(position) {
+  sub_labels <- c("A","B","C","D","E","F","G")
+  sub_index <- findInterval(position, breaks_inputheatmap_input)
+  return(sub_labels[sub_index])
+}
+
+#Create a column sub to add labels for the different rows of the heatmap
+df_input_condition$sub <- sapply(df_input_condition$position, get_label_input_condition)
+
+#Use amino acid as factors
+df_input_condition$Aminoacid=factor(df_input_condition$Aminoacid,levels = c("P","G","Y","W","F","V","L","I","A","T","S","Q","N","M","C","E","D","R","K","H"))
+
+#Calculate log2 count (adding psuedo count of +1)
+df_input_condition <- df_input_condition %>% mutate(log2_count = log2(count+1))
+
+#Heatmap for DMS scores in control condition
+DMS_Heatmap_Replication_Input <- ggplot(df_input_condition)+geom_tile(aes(position, Aminoacid, fill = log2_count)) +
+    scale_fill_gradient(na.value = "black") + theme_classic() + facet_wrap(sub ~ ., scales = "free_x",ncol=1) + theme(aspect.ratio = 0.1,axis.text.y = element_text(size = 3))+ theme(strip.text.x = element_blank())
+
+DMS_Heatmap_Replication_Input
+
+ggsave(plot = DMS_Heatmap_Replication_Input,filename = "DMS_Heatmap_Replication_Input.pdf",width = 8,height=11)
+```
+
+```{r}
 #Heatmap for DMS scores in control condition
 DMS_Heatmap_Replication_Control <- ggplot(df_control_full_wt)+geom_tile(aes(position, Aminoacid, fill = score_Control_Condition)) +
     scale_fill_gradient2(midpoint = 0,limits = c(-8,8),low = muted("orchid2"), mid = "white",
@@ -557,95 +614,56 @@ plot_enrichment(df_BrefA_full, drug_name = "BrefA", enrichment_cutoff = enrichme
 ```
 
 ```{r}
-heat_map_common_sites <- function(df) {
+#Creating a function to plot top 10 hits of IC50/90/99 in a heatmap
+heat_map_common_sites <- function(df,drug_name) {
+
+#Filter for any site that is higher than cutoff for IC50, 90, 99  
 df <- df %>%  filter(Mean_Enrichment_IC50 > enrichment_cutoff | Mean_Enrichment_IC90 > enrichment_cutoff | Mean_Enrichment_IC99 > enrichment_cutoff)
 
+#Rewriting hgvs so it is indexed according to polyprotein position
+df$ref_aa <- gsub("p\\.\\(([A-Z])\\d+[A-Z]\\)", "\\1", df$hgvs)
+df$alt_aa <- gsub("p\\.\\([A-Z]\\d+([A-Z])\\)", "\\1", df$hgvs)
+df$hgvs <- paste0("p.(",df$ref_aa,df$position,df$alt_aa,")")
+
+#Select columns of interest
 df  <-  select(df, position,hgvs,Mean_Enrichment_IC50, Mean_Enrichment_IC90, Mean_Enrichment_IC99)
 
+#Use factor to order hgvs according to position
 df$hgvs <- factor(df$hgvs, levels = rev(df$hgvs[order(df$position)]))
 
-#Top 10 from each IC,  merge and remove duplicates
+#Create a df with top 10 from each IC
 df_50 <- df %>% arrange(desc(Mean_Enrichment_IC50)) %>% head(10) 
 df_90 <- df %>% arrange(desc(Mean_Enrichment_IC90)) %>% head(10) 
 df_99 <- df %>% arrange(desc(Mean_Enrichment_IC99)) %>% head(10) 
 
-
 #Binds the row of dataframe IC50/IC90/IC99 : then keep only distinct positions and hgvs
 df <- bind_rows(df_50, df_90, df_99) %>% distinct(hgvs, .keep_all = TRUE)
 
-df <- df %>%pivot_longer(cols = c(Mean_Enrichment_IC50, Mean_Enrichment_IC90, Mean_Enrichment_IC99),
+df <- df %>% pivot_longer(cols = c(Mean_Enrichment_IC50, Mean_Enrichment_IC90, Mean_Enrichment_IC99),
     names_to = "measurement",
     values_to = "enrichment")
 
+#Create heatmap for different concentrations, highlighting in red above threshold
 heatmap_common <- ggplot(df, aes(x = measurement, y = hgvs, fill = enrichment)) + geom_tile() +coord_fixed()+
   theme_minimal(base_size = 12) +theme(axis.text.x = element_text(angle = 45, hjust = 1),
     axis.text.y = element_text(size = 6))+ scale_fill_gradient(low = "white",high = "#56B1F7")+
-  geom_text(data =filter(df, enrichment > enrichment_cutoff),label = "*",size = 3,  color = "black")
+  geom_tile(data = filter(df, enrichment > enrichment_cutoff),fill = NA,color = "red",linewidth = 0.2)+theme_classic()
+
+ggsave(plot = heatmap_common, filename = paste0("Heatmap_top", drug_name, ".pdf"), height = 6, width = 4)
+
 return(heatmap_common)
 }
 
-heat_map_common_sites(df_guan_full)
-
-#Merge three df with top hits 10 at each ic concentration
-
-#df_rupi_full
-#df_guan_full
-#df_enviroxime_full
-#df_BrefA_full
-
+#Usage of function:
+#Rupi
+heat_map_common_sites(df_rupi_full, drug_name = "rupi")
+#Guan
+heat_map_common_sites(df_guan_full, drug_name = "guan")
+#Envi
+heat_map_common_sites(df_enviroxime_full, drug_name = "envi")
+#BrefA
+heat_map_common_sites(df_BrefA_full, drug_name = "BrefA")
 ```
-
-
-  
-
-  # 4) Order hgvs by genomic position (so y-axis is nice)
-  df_top <- df_top %>%
-    arrange(position) %>%
-    mutate(hgvs = factor(hgvs, levels = unique(hgvs)))
-
-  # 5) Data frame for stars
-  stars <- df_top %>% filter(enrichment > enrichment_cutoff)
-
-  # ---- Version 1: single heatmap, x = concentration ----
-  p_main <- ggplot(df_top, aes(x = measurement, y = hgvs, fill = enrichment)) +
-    geom_tile() +
-    coord_fixed() +
-    theme_minimal(base_size = 12) +
-    theme(
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      axis.text.y = element_text(size = 6)
-    ) +
-    scale_fill_gradient(low = "white", high = "#56B1F7") +
-    geom_text(
-      data = stars,
-      label = "*",
-      size = 3,
-      color = "black"
-    )
-
-  return(p_main)
-}
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ```{r}
 #This is a function to create a rolling mean of the enrichment scores for the different antivirals at different concentrations
@@ -850,6 +868,7 @@ Mutants_2C_guan_resistance <- select(Mutants_2C_guan_resistance,hgvs,Mean_Enrich
 Mutants_2C_guan_resistance <- arrange(Mutants_2C_guan_resistance,desc(Mean_Enrichment_IC99))
 
 Mutants_2C_guan_resistance
+
 ```
 
 
@@ -870,6 +889,7 @@ Mutants_2C_BrefA_resistance <- select(Mutants_2C_BrefA_resistance,hgvs,Mean_Enri
 Mutants_2C_BrefA_resistance <- arrange(Mutants_2C_BrefA_resistance,desc(Mean_Enrichment_IC99))
 
 Mutants_2C_BrefA_resistance
+
 ```
 
 ```{r}
@@ -977,10 +997,6 @@ write.csv(df_90_envi_max_3AB_chimerax,file ="df_90_envi_max_3AB_chimerax.csv")
 ```
 
 
-
-
-
-
 ```{r}
 #Asking what are the differences in enrichment scores if residues are in interaction between 3A and PI4K/ACBD3 at IC90 and IC99
 
@@ -1074,7 +1090,6 @@ Mutants_3A_enviroxime_resistance_90
 #Arrange by desc for mean_score_IC99_enrichment
 Mutants_3A_enviroxime_resistance_99 <- arrange(Mutants_3A_enviroxime_resistance,desc(Mean_Enrichment_IC99))
 Mutants_3A_enviroxime_resistance_99
-
 ```
 
 
@@ -1163,10 +1178,6 @@ df_99_rupi_max_3CD_chimerax
 write.csv(df_99_rupi_max_3CD_chimerax,file ="df_99_rupi_max_3CD_chimerax.csv")
 
 ```
-
-
-
-
 
 ```{r}
 #Focusing structural analysis on Rupintrivir IC90 and IC99 mutants in 2A
