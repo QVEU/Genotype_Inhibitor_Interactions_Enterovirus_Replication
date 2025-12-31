@@ -49,3 +49,4 @@ This folder contains all structural predictions used in the paper.
 - **"AlphaFold3_3A_Dimer"**: AlphaFold3 prediction of EVA71 3A dimer
 - **"AlphaFold3_3A_GBF1"**: AlphaFold3 prediction of EVA71 3A dimer with GBF1 
 - **"ChimeraX_Attributes"**: Attributes for mapping variant enrichment in Enviroxime and Brefeldin A conditions on 3A structures
+- **"PDB_6HLW"**: EVA71 3A–ACBD3 GOLD domain complex
