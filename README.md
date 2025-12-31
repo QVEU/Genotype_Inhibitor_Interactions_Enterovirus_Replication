@@ -42,6 +42,7 @@ This repository contains all files, scripts, and structural predictions used in 
 ## 2. R Scripts
 - **"R_Script_Inhibitory_concentration_Analysis"**: Calculates different inhibitory concentrations (ICs) of inhibitors  
 - **"R_Script_Main_Figures_Analysis"**: Performs analysis and generates the main figures for the manuscript  
+- **"R_Script_Replicon_Enriched_Variants"**: Performs analysis and generates the figures for the replicon assays  
 
 ---
 
